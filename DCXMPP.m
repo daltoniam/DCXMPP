@@ -7,7 +7,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #import "DCXMPP.h"
-#import "XMLKit.h"
 #import "BoshRequest.h"
 #import "NSData+base64.h"
 
@@ -49,15 +48,19 @@
 //we are trying to authenicate
 @property(nonatomic,assign)BOOL isAuthing;
 
+//All the users from groups or the roster
+@property(nonatomic,strong)NSMutableDictionary *users;
+
+//The users in the current user's roster
+@property(nonatomic,strong)NSMutableDictionary *rosterUsers;
+
+//The users in the current user's groups
+@property(nonatomic,strong)NSMutableDictionary *groups;
+
 @end
 
 @implementation DCXMPP
 
-static NSString *XMLNS_BOSH = @"http://jabber.org/protocol/httpbind";
-static NSString *XMLNS_CHAT_STATE = @"http://jabber.org/protocol/chatstates";
-static NSString *BIND_XMLNS = @"urn:ietf:params:xml:ns:xmpp-bind";
-static NSString *CLIENT_XMLNS  = @"jabber:client";
-static NSString *SESSION_XMLNS = @"urn:ietf:params:xml:ns:xmpp-session";
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 +(instancetype)manager
 {
@@ -92,6 +95,86 @@ static NSString *SESSION_XMLNS = @"urn:ietf:params:xml:ns:xmpp-session";
         XMLElement *content = [XMLElement elementWithName:@"body" attributes:attributes];
         [self addContent:content];
     }
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//roster processing
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)getRoster
+{
+    XMLElement* element = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"get",
+                                                                         @"from": self.currentUser.jid.fullJID,
+                                                                         @"id": @"roster_1"}];
+    XMLElement* query = [XMLElement elementWithName:@"query" attributes:@{@"xmlns": @"jabber:iq:roster"}];
+    [element.childern addObject:query];
+    [self addContent:element];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)handleRosterResponse:(NSArray*)elements
+{
+    if(!self.roster)
+        _roster = [[NSMutableArray alloc] initWithCapacity:elements.count];
+    
+    if(!self.rosterUsers)
+        self.rosterUsers = [[NSMutableDictionary alloc] initWithCapacity:elements.count];
+    
+    if(!self.users)
+        self.users = [[NSMutableDictionary alloc] initWithCapacity:elements.count];
+    
+    [self.users removeObjectsForKeys:[self.rosterUsers allKeys]];
+    [self.rosterUsers removeAllObjects];
+    [(NSMutableArray*)_roster removeAllObjects];
+    for(XMLElement *element in elements)
+    {
+        DCXMPPUser *user = [DCXMPPUser userWithJID:element.attributes[@"jid"]];
+        user.name = element.attributes[@"name"];
+        [self.users setObject:user forKey:user.jid.bareJID];
+        [self.rosterUsers setObject:user forKey:user.jid.bareJID];
+        [(NSMutableArray*)_roster addObject:user];
+    }
+    if([self.delegate respondsToSelector:@selector(didRecieveRoster:)])
+        [self.delegate didRecieveRoster:self.roster];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//bookmark processing
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)getBookmarks
+{
+    XMLElement* element = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"get",
+                                                                         @"from": self.currentUser.jid.fullJID,
+                                                                         @"id": @"bookmark_1"}];
+    XMLElement* query = [XMLElement elementWithName:@"query" attributes:@{@"xmlns": @"jabber:iq:private"}];
+    [element.childern addObject:query];
+    XMLElement* storage = [XMLElement elementWithName:@"storage" attributes:@{@"xmlns": @"storage:bookmarks"}];
+    [query.childern addObject:storage];
+    [self addContent:element];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)handleBookmarksResponse:(XMLElement*)element
+{
+    NSArray* confs = [element findElements:@"conference"];
+    if(confs.count > 0)
+    {
+        if(!self.groups)
+            self.groups = [[NSMutableDictionary alloc] initWithCapacity:confs.count];
+        [self.groups removeAllObjects];
+        for(XMLElement* child in confs)
+        {
+            DCXMPPGroup *group = [DCXMPPGroup groupWithJID:child.attributes[@"jid"]];
+            group.name = child.attributes[@"name"];
+            [self.groups setObject:group forKey:group.jid.bareJID];
+            if([child.attributes[@"autojoin"] boolValue])
+                [group join];
+        }
+    }
+    if([self.delegate respondsToSelector:@selector(didRecieveBookmarks)])
+        [self.delegate didRecieveBookmarks];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//content queueing
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)sendStanza:(XMLElement*)element
+{
+    [self addContent:element];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)addContent:(XMLElement*)element
@@ -178,6 +261,8 @@ static NSString *SESSION_XMLNS = @"urn:ietf:params:xml:ns:xmpp-session";
     //NSLog(@"request failed");
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+//process responses
+////////////////////////////////////////////////////////////////////////////////////////////////////
 -(BOOL)processResponse:(XMLElement*)element
 {
     if(!self.isConnected)
@@ -201,7 +286,8 @@ static NSString *SESSION_XMLNS = @"urn:ietf:params:xml:ns:xmpp-session";
             else
             {
                 self.boshSID = nil;
-                //notify delegate that we didn't authenicate
+                if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
+                    [self.delegate didFailXMPPLogin];
                 return NO;
             }
             
@@ -214,29 +300,27 @@ static NSString *SESSION_XMLNS = @"urn:ietf:params:xml:ns:xmpp-session";
             {
                 XMLElement* element = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"set",
                                                                                      @"id": @"sess_1",
-                                                                                     @"xmlns": CLIENT_XMLNS}];
-                XMLElement* sesson = [XMLElement elementWithName:@"session" attributes:@{@"xmlns": SESSION_XMLNS}];
+                                                                                     @"xmlns": XMLNS_CLIENT}];
+                XMLElement* sesson = [XMLElement elementWithName:@"session" attributes:@{@"xmlns": XMLNS_SESSION}];
                 [element.childern addObject:sesson];
                 [self addContent:element];
                 NSString* jid = jidElement.text;
-                NSLog(@"we got our jid: %@",jid);
-                //got our jid!
-                /*userJID = [[rootElement findElement:@"jid"] text];
-                self.userItem = [GPXMPPUser userWithName:nil jid:self.userJID];
-                self.userItem.presence = GPUserPresenceAvailable;
-                [self goOnline];
-                [self fetchRoster];
-                isConnected = YES;
-                [self sendListen];
-                if([self.delegate respondsToSelector:@selector(didConnect)])
-                    [self.delegate didConnect];*/
+                _currentUser = [DCXMPPUser userWithJID:jid];
+                _currentUser.presence = DCUserPresenceAvailable;
+                _isConnected = YES;
+                [self addContent:[XMLElement elementWithName:@"presence" attributes:nil]];
+                [self getRoster];
+                [self getBookmarks];
+                [self.currentUser getVCard];
+                if([self.delegate respondsToSelector:@selector(didXMPPConnect)])
+                    [self.delegate didXMPPConnect];
             }
             else
             {
                 XMLElement* element = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"set",
                                                                                      @"id": @"bind_1",
-                                                                                     @"xmlns": CLIENT_XMLNS}];
-                XMLElement* bind = [XMLElement elementWithName:@"bind" attributes:@{@"xmlns": BIND_XMLNS}];
+                                                                                     @"xmlns": XMLNS_CLIENT}];
+                XMLElement* bind = [XMLElement elementWithName:@"bind" attributes:@{@"xmlns": XMLNS_BIND}];
                 [element.childern addObject:bind];
                 [self addContent:element];
             }
@@ -260,7 +344,171 @@ static NSString *SESSION_XMLNS = @"urn:ietf:params:xml:ns:xmpp-session";
                 [self handleAuthenication:features];
         }
     }
+    else
+    {
+        if(element.childern.count > 0 && [element.name isEqualToString:@"body"])
+        {
+            for(XMLElement* response in element.childern)
+            {
+                if([response.attributes[@"id"] isEqualToString:@"roster_1"])
+                    [self handleRosterResponse:[response findElements:@"item"]];
+                else if([response.attributes[@"id"] isEqualToString:@"bookmark_1"])
+                    [self handleBookmarksResponse:response];
+                else if([response.name isEqualToString:@"message"] && [response.attributes[@"type"] rangeOfString:@"chat"].location != NSNotFound)
+                    [self handleMessageResponse:response];
+                if([response.attributes[@"id"] isEqualToString:@"vcard_get_1"])
+                    [self handleVCardResponse:response];
+                if([response.name isEqualToString:@"presence"])
+                    [self handlePresenceResponse:response];
+            }
+        }
+    }
     return YES;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)handleMessageResponse:(XMLElement*)element
+{
+    NSString *jidString = element.attributes[@"from"];
+    DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
+    
+    XMLElement* xElement = [element findElement:@"x"];
+    if(xElement)
+    {
+        if([xElement.attributes[@"xmlns"] isEqualToString:@"jabber:x:conference"])
+        {
+            //[self fetchDiscoInfo:[xElement.attributes objectForKey:@"jid"]];
+            return;
+        }
+    }
+    
+    if(self.currentUser.jid.bareJID == jid.bareJID)
+        return;
+    DCXMPPGroup *group = self.groups[jid.bareJID];
+    DCXMPPUser *user = nil;
+    if(group)
+    {
+        NSString *groupUserJid = [NSString stringWithFormat:@"%@@%@",group.jid.resource,group.jid.host];
+        user = self.users[groupUserJid];
+    }
+    else
+        user = self.users[jid.bareJID];
+    
+    if(user)
+    {
+        XMLElement *body = [element findElement:@"body"];
+        if(body && body.text)
+        {
+            if(group)
+            {
+                if(self.currentUser.jid.bareJID == user.jid.bareJID)
+                {
+                    if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:)])
+                        [self.delegate didRecieveGroupCarbon:body.text group:group from:user];
+                }
+                else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:)])
+                    [self.delegate didRecieveGroupMessage:body.text group:group from:user];
+            }
+            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:)])
+                [self.delegate didRecieveMessage:body.text from:user];
+        }
+        else
+        {
+            DCTypingState state = DCTypingActive;
+            if([element findElement:@"composing"])
+                state = DCTypingComposing;
+            else if([element findElement:@"inactive"])
+                state = DCTypingInActive;
+            else if([element findElement:@"paused"])
+                state = DCTypingPaused;
+            else if([element findElement:@"gone"])
+                state = DCTypingGone;
+            
+            if(group)
+            {
+                if([self.delegate respondsToSelector:@selector(didRecieveGroupTypingState:group:from:)])
+                    [self.delegate didRecieveGroupTypingState:state group:group from:user];
+            }
+            else if([self.delegate respondsToSelector:@selector(didRecieveTypingState:from:)])
+                [self.delegate didRecieveTypingState:state from:user];
+        }
+    }
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)handleVCardResponse:(XMLElement*)element
+{
+    NSString *jidString = element.attributes[@"from"];
+    DCXMPPUser *user = nil;
+    if(!jidString)
+        user = self.currentUser;
+    else
+    {
+        DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
+        user = self.users[jid.bareJID];
+    }
+    XMLElement *nameElement = [element findElement:@"fn"];
+    if(nameElement && nameElement.text.length > 0)
+        user.name = [nameElement.text xmlUnSafe];
+    NSString* string = [element findElement:@"binval"].text;
+    if(string)
+    {
+        user.avatarData = [string dataUsingEncoding:NSASCIIStringEncoding];
+        user.avatarData = [user.avatarData base64Decoded];
+    }
+    if([self.delegate respondsToSelector:@selector(didUpdateVCard:)])
+        [self.delegate didUpdateVCard:user];
+    
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)handlePresenceResponse:(XMLElement*)element
+{
+    NSString *type = element.attributes[@"type"];
+    NSString *jidString = element.attributes[@"from"];
+    DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
+    DCXMPPUser *user = self.users[jid.bareJID];
+    if(user)
+    {
+        XMLElement* statusElement = [element findElement:@"status"];
+        if(statusElement && !type)
+            type = [statusElement.text lowercaseString];
+        if(!type)
+            user.presence = DCUserPresenceAvailable;
+        else if([type isEqualToString:@"unavailable"])
+            user.presence = DCUserPresenceUnAvailable;
+        else if([type isEqualToString:@"available"])
+            user.presence = DCUserPresenceAvailable;
+        else if([type isEqualToString:@"busy"])
+            user.presence = DCUserPresenceBusy;
+        
+        XMLElement* showElement = [element findElement:@"show"];
+        if(showElement)
+        {
+            if([showElement.text isEqualToString:@"chat"])
+                user.presence = DCUserPresenceAvailable;
+            else if([showElement.text isEqualToString:@"away"])
+                user.presence = DCUserPresenceAway;
+            else if([showElement.text isEqualToString:@"xa"])
+                user.presence = DCUserPresenceAway;
+            else if([showElement.text isEqualToString:@"dnd"])
+                user.presence = DCUserPresenceBusy;
+        }
+        if(statusElement)
+            user.status = [statusElement.text xmlUnSafe];
+        else
+            user.status = nil;
+        
+        XMLElement* photoElement = [element findElement:@"photo"];
+        if(photoElement)
+            user.imageHash = photoElement.text;
+        
+        if([self.delegate respondsToSelector:@selector(didUpdatePresence:)])
+            [self.delegate didUpdatePresence:user];
+    }
+    
+    DCXMPPGroup *group = self.groups[jid.bareJID];
+    if(group)
+    {
+        NSLog(@"need to finish group element: %@",[element convertToString]);
+    }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //Authenication stuff
