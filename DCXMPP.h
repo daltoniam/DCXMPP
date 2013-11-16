@@ -38,7 +38,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 -(void)didRecieveRoster:(NSArray*)users;
 
 /**
- Recieved the roster.
+ Recieved the bookmarks.
  */
 -(void)didRecieveBookmarks;
 
@@ -139,12 +139,19 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  The connect method that starts the xmpp handshake over BOSH.
  @param userName is the username you want to login with.
  @param password is the password of the username.
- @param server is the server to connect to.
- @param port is the port to connect over to the xmpp server for the BOSH server.
  @param host is your host domain.
  @param boshURL is the boshURL to connect to.
  */
 -(void)connect:(NSString*)userName password:(NSString*)password host:(NSString*)host boshURL:(NSString*)boshURL;
+
+/**
+ The connect method is used for a custom persistence option.
+ @param jid is the jid that was saved.
+ @param rid is the rid that was saved.
+ @param host is your host domain.
+ @param boshURL is the boshURL to connect to.
+ */
+-(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL;
 
 
 /**

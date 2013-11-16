@@ -97,6 +97,24 @@
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL
+{
+    self.boshSID = sid;
+    self.maxCount = 2;
+    self.host = host;
+    self.boshURL = boshURL;
+    self.boshRID = rid;
+    _currentUser = [DCXMPPUser userWithJID:jid];
+    _currentUser.presence = DCUserPresenceAvailable;
+    _isConnected = YES;
+    [self addContent:[XMLElement elementWithName:@"presence" attributes:nil]];
+    [self getRoster];
+    [self getBookmarks];
+    [self.currentUser getVCard];
+    if([self.delegate respondsToSelector:@selector(didXMPPConnect)])
+        [self.delegate didXMPPConnect];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
 //roster processing
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)getRoster
@@ -346,7 +364,18 @@
     }
     else
     {
-        if(element.childern.count > 0 && [element.name isEqualToString:@"body"])
+        if([element.name isEqualToString:@"body"] && [element.attributes[@"type"] isEqualToString:@"terminate"])
+        {
+            if(self.isConnected)
+            {
+                _isConnected = NO;
+                self.boshSID = nil;
+                if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
+                    [self.delegate didFailXMPPLogin];
+            }
+            return NO;
+        }
+        else if(element.childern.count > 0 && [element.name isEqualToString:@"body"])
         {
             for(XMLElement* response in element.childern)
             {
@@ -438,24 +467,27 @@
 {
     NSString *jidString = element.attributes[@"from"];
     DCXMPPUser *user = nil;
-    if(!jidString)
+    if(!jidString || [self.currentUser.jid.bareJID isEqualToString:jidString])
         user = self.currentUser;
     else
     {
         DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
         user = self.users[jid.bareJID];
     }
-    XMLElement *nameElement = [element findElement:@"fn"];
-    if(nameElement && nameElement.text.length > 0)
-        user.name = [nameElement.text xmlUnSafe];
-    NSString* string = [element findElement:@"binval"].text;
-    if(string)
+    if(user)
     {
-        user.avatarData = [string dataUsingEncoding:NSASCIIStringEncoding];
-        user.avatarData = [user.avatarData base64Decoded];
+        XMLElement *nameElement = [element findElement:@"fn"];
+        if(nameElement && nameElement.text.length > 0)
+            user.name = [nameElement.text xmlUnSafe];
+        NSString* string = [element findElement:@"binval"].text;
+        if(string)
+        {
+            user.avatarData = [string dataUsingEncoding:NSASCIIStringEncoding];
+            user.avatarData = [user.avatarData base64Decoded];
+        }
+        if([self.delegate respondsToSelector:@selector(didUpdateVCard:)])
+            [self.delegate didUpdateVCard:user];
     }
-    if([self.delegate respondsToSelector:@selector(didUpdateVCard:)])
-        [self.delegate didUpdateVCard:user];
     
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////

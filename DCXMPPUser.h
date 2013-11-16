@@ -84,20 +84,20 @@ typedef enum {
 @property(nonatomic,copy)NSString *name;
 
 /**
- This returns the name or 'nickname' of the user.
- @return The name of the user.
+ This returns the image hash of the user.
+ @return The image hash of the user.
  */
 @property(nonatomic,copy)NSString *imageHash;
 
 /**
- This returns the name or 'nickname' of the user.
- @return The name of the user.
+ This returns the avatar (vcard image) of the user.
+ @return The avatar of the user.
  */
 @property(nonatomic,strong)NSData *avatarData;
 
 /**
- This returns the name or 'nickname' of the user.
- @return The name of the user.
+ This returns the jid object of the user
+ @return The jid of the user.
  */
 @property(nonatomic,strong)DCXMPPJID *jid;
 
