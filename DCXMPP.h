@@ -107,6 +107,18 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 @interface DCXMPP : NSObject
 
 /**
+ This returns the current bosh RID.
+ @return long long value of the boshRID
+ */
+@property(nonatomic,assign,readonly)long long currentBoshRID;
+
+/**
+ This returns the current bosh SID.
+ @return String value of the boshSID
+ */
+@property(nonatomic,copy,readonly)NSString *currentBoshSID;
+
+/**
  This returns if we are connected to the server or not.
  @return YES if connected.
  */
@@ -159,5 +171,12 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  @param The XMLElement stanza to send.
  */
 -(void)sendStanza:(XMLElement*)element;
+
+/**
+ Queues and sends an message to the user jid.
+ @param text is the text string to send.
+ @param The jid is the jid string of the user to send to.
+ */
+-(void)sendMessage:(NSString *)text jid:(NSString*)jid;
 
 @end

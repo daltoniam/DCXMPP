@@ -12,6 +12,9 @@
 
 @interface DCXMPP ()
 
+//set if we are using a custom connection method
+@property(nonatomic,assign)BOOL isCustomConnect;
+
 //this handles queuing of the data you want to send to the server
 @property(nonatomic,strong)NSMutableArray* contentQueue;
 
@@ -74,6 +77,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)connect:(NSString*)userName password:(NSString*)password host:(NSString*)host boshURL:(NSString*)boshURL
 {
+    self.isCustomConnect = NO;
     if(!self.isConnected)
     {
         self.password = password;
@@ -81,6 +85,7 @@
         self.maxCount = 2;
         self.host = host;
         self.boshURL = boshURL;
+        self.timeout = 5;
         self.boshRID = [self generateRid];
         NSDictionary *attributes = @{@"content": @"text/xml; charset=utf-8",
                                      @"hold": @"3",
@@ -99,9 +104,12 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL
 {
+    self.isCustomConnect = YES;
+    [self.contentQueue removeAllObjects];
     self.boshSID = sid;
     self.maxCount = 2;
     self.host = host;
+    self.timeout = 5;
     self.boshURL = boshURL;
     self.boshRID = rid;
     _currentUser = [DCXMPPUser userWithJID:jid];
@@ -195,6 +203,13 @@
     [self addContent:element];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)sendMessage:(NSString *)text jid:(NSString*)jid
+{
+    DCXMPPUser *user = self.users[jid];
+    if(user)
+        [user sendMessage:text];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)addContent:(XMLElement*)element
 {
     if(!self.contentQueue)
@@ -233,7 +248,7 @@
         }
         
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:self.boshURL]];
-        [request setTimeoutInterval:30];
+        [request setTimeoutInterval:self.timeout];
         NSData *postBody = [postText dataUsingEncoding:NSUTF8StringEncoding];
         unsigned long long postLength = postBody.length;
         NSString *contentLength = [NSString stringWithFormat:@"%llu", postLength];
@@ -285,6 +300,8 @@
 {
     if(!self.isConnected)
     {
+        if(self.isCustomConnect)
+            return NO;
         if(self.isAuthing)
         {
             XMLElement* success = [element findElement:@"success"];
@@ -369,16 +386,18 @@
             if(self.isConnected)
             {
                 _isConnected = NO;
+                [self.contentQueue removeAllObjects];
                 self.boshSID = nil;
                 if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
                     [self.delegate didFailXMPPLogin];
             }
-            return NO;
+            return YES;
         }
         else if(element.childern.count > 0 && [element.name isEqualToString:@"body"])
         {
             for(XMLElement* response in element.childern)
             {
+                //NSLog(@"response: %@",[response convertToString]);
                 if([response.attributes[@"id"] isEqualToString:@"roster_1"])
                     [self handleRosterResponse:[response findElements:@"item"]];
                 else if([response.attributes[@"id"] isEqualToString:@"bookmark_1"])
@@ -582,6 +601,16 @@
 - (long long)generateRid
 {
     return (arc4random() % 1000000000LL + 1000000001LL);
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(long long)currentBoshRID
+{
+    return self.boshRID;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(NSString*)currentBoshSID
+{
+    return self.boshSID;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

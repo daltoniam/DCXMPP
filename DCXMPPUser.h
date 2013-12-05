@@ -9,8 +9,8 @@
 #import <Foundation/Foundation.h>
 
 typedef enum {
-    DCUserPresenceAvailable,
     DCUserPresenceUnAvailable,
+    DCUserPresenceAvailable,
     DCUserPresenceAway,
     DCUserPresenceBusy
 } DCUserPresence;
