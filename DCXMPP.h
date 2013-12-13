@@ -173,10 +173,17 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
 -(void)sendStanza:(XMLElement*)element;
 
 /**
- Queues and sends an message to the user jid.
+ Queues and sends a message to the user jid.
  @param text is the text string to send.
  @param The jid is the jid string of the user to send to.
  */
 -(void)sendMessage:(NSString *)text jid:(NSString*)jid;
+
+/**
+ Queues and sends a typing state to the user jid.
+ @param state is the state option to send.
+ @param The jid is the jid string of the user to send to.
+ */
+-(void)sendTypingState:(DCTypingState)state jid:(NSString*)jid;
 
 @end
