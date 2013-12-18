@@ -186,4 +186,22 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  */
 -(void)sendTypingState:(DCTypingState)state jid:(NSString*)jid;
 
+/**
+ Find a DCXMPPUser for a jid
+ @param The jid is the jid string of the user to find.
+ */
+-(DCXMPPUser*)userForJid:(NSString*)jid;
+
+/**
+ Find a DCXMPPGroup for a jid
+ @param The jid is the jid string of the group to find.
+ */
+-(DCXMPPGroup*)groupForJid:(NSString*)jid;
+
+/**
+ Custom use. Adds a group object to the list of groups.
+ @param DCXMPPGroup to add.
+ */
+-(void)addGroup:(DCXMPPGroup*)group;
+
 @end

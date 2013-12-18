@@ -22,6 +22,11 @@ typedef enum {
     DCTypingComposing,
     DCTypingPaused
 } DCTypingState;
+
+typedef enum {
+    DCGroupRoleMember,
+    DCGroupRoleOwner
+} DCGroupRole;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 @interface DCXMPPJID : NSObject
 
@@ -168,6 +173,9 @@ typedef enum {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //XEP-0045.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+@class DCXMPPGroupUser;
+
 @interface DCXMPPGroup : DCXMPPUser
 
 /**
@@ -175,6 +183,27 @@ typedef enum {
  @return if the group is joined or not.
  */
 @property(nonatomic,assign,readonly)BOOL isJoined;
+
+/**
+ This returns if this group is currently joined or not.
+ @param user is the user object to add to the group.
+ @param role is the role the user has in the group.
+ */
+-(void)addUser:(DCXMPPUser*)user role:(DCGroupRole)role;
+
+/**
+ Remove a user from a group.
+ @param remove a user from the group.
+ */
+-(void)removeUser:(DCXMPPUser*)user;
+
+/**
+ This returns a DCXMPPGroupUser object by searching for a user.
+ @param user is the user object to find in the group.
+ */
+-(DCXMPPGroupUser*)findUser:(DCXMPPUser*)user;
+
+
 /**
  This initializes and returns a DCXMPPGroup object.
  @param jid is the string representation of the jid.
@@ -186,6 +215,42 @@ typedef enum {
  Joins the group if it is not joined yet
  */
 -(void)join;
+
+/**
+ leaves the group if it is joined.
+ */
+-(void)leave;
+
+
+@end
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+@interface DCXMPPGroupUser : NSObject
+
+/**
+ This is the user in the group.
+ */
+@property(nonatomic,strong)DCXMPPUser *user;
+
+/**
+ This is the role the user has in the group.
+ */
+@property(nonatomic)DCGroupRole role;
+
+/**
+ Returns if the user is the owner of the group
+ */
+-(BOOL)isOwner;
+
+/**
+ Factory method that initalizes and returns a new DCXMPPGroupUser.
+ @param user is the DCXMPPUser that is in the group.
+ @param is the user's role in the group.
+ @return is a new DCXMPPGroupUser.
+ */
++(DCXMPPGroupUser*)groupUser:(DCXMPPUser*)user role:(DCGroupRole)role;
+
 
 
 @end

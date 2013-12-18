@@ -106,6 +106,13 @@
 {
     self.isCustomConnect = YES;
     [self.contentQueue removeAllObjects];
+    if(!jid || !sid || rid <= 0 || !host || !boshURL)
+    {
+        self.boshSID = nil;
+        if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
+            [self.delegate didFailXMPPLogin];
+        return;
+    }
     self.boshSID = sid;
     self.maxCount = 2;
     self.host = host;
@@ -121,6 +128,24 @@
     [self.currentUser getVCard];
     if([self.delegate respondsToSelector:@selector(didXMPPConnect)])
         [self.delegate didXMPPConnect];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(DCXMPPUser*)userForJid:(NSString*)jid
+{
+    return self.users[jid];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(DCXMPPGroup*)groupForJid:(NSString*)jid
+{
+    return self.groups[jid];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)addGroup:(DCXMPPGroup*)group
+{
+    if(!self.groups)
+        self.groups = [[NSMutableDictionary alloc] init];
+    if(!self.groups[group.jid.bareJID])
+        [self.groups setObject:group forKey:group.jid.bareJID];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //roster processing
@@ -206,6 +231,8 @@
 -(void)sendMessage:(NSString *)text jid:(NSString*)jid
 {
     DCXMPPUser *user = self.users[jid];
+    if(!user)
+        user = self.groups[jid];
     if(user)
         [user sendMessage:text];
 }
@@ -213,6 +240,8 @@
 -(void)sendTypingState:(DCTypingState)state jid:(NSString*)jid
 {
     DCXMPPUser *user = self.users[jid];
+    if(!user)
+        user = self.groups[jid];
     if(user)
         [user sendTypingState:state];
 }
@@ -411,7 +440,7 @@
                     [self handleBookmarksResponse:response];
                 else if([response.name isEqualToString:@"message"] && [response.attributes[@"type"] rangeOfString:@"chat"].location != NSNotFound)
                     [self handleMessageResponse:response];
-                if([response.attributes[@"id"] isEqualToString:@"vcard_get_1"])
+                if([response.attributes[@"id"] hasPrefix:@"vcard_get"])
                     [self handleVCardResponse:response];
                 if([response.name isEqualToString:@"presence"])
                     [self handlePresenceResponse:response];
@@ -442,8 +471,11 @@
     DCXMPPUser *user = nil;
     if(group)
     {
-        NSString *groupUserJid = [NSString stringWithFormat:@"%@@%@",group.jid.resource,group.jid.host];
-        user = self.users[groupUserJid];
+        if(jid.resource)
+        {
+            NSString *groupUserJid = [NSString stringWithFormat:@"%@@%@",jid.resource,self.host];
+            user = self.users[groupUserJid];
+        }
     }
     else
         user = self.users[jid.bareJID];
@@ -565,7 +597,34 @@
     DCXMPPGroup *group = self.groups[jid.bareJID];
     if(group)
     {
-        NSLog(@"need to finish group element: %@",[element convertToString]);
+        NSArray *items = [element findElements:@"item"];
+        for(XMLElement *itemElement in items)
+        {
+            NSString *itemJidString = itemElement.attributes[@"jid"];
+            if(itemJidString)
+            {
+                DCXMPPJID *itemJid = [DCXMPPJID jidWithString:itemJidString];
+                NSString *roleType = itemElement.attributes[@"affiliation"];
+                DCGroupRole role = DCGroupRoleMember;
+                if([roleType isEqualToString:@"owner"])
+                    role = DCGroupRoleOwner;
+                DCXMPPUser *user = self.users[itemJid.bareJID];
+                if([itemJid.bareJID isEqualToString:self.currentUser.jid.bareJID])
+                    user = self.currentUser;
+                if(!user)
+                {
+                    DCXMPPUser *user = [DCXMPPUser userWithJID:itemJidString];
+                    [self.users setObject:user forKey:user.jid.bareJID];
+                    [user getVCard];
+                    [user getPresence];
+                    NSLog(@"user: %@ is not in our roster....",itemJid.bareJID);
+                    [group addUser:user role:role];
+                }
+                else
+                    [group addUser:user role:role];
+            }
+        }
+        //NSLog(@"need to finish group element: %@",[element convertToString]);
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
