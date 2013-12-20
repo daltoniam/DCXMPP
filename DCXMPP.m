@@ -465,8 +465,6 @@
         }
     }
     
-    if(self.currentUser.jid.bareJID == jid.bareJID)
-        return;
     DCXMPPGroup *group = self.groups[jid.bareJID];
     DCXMPPUser *user = nil;
     if(group)
@@ -495,11 +493,13 @@
                 else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:)])
                     [self.delegate didRecieveGroupMessage:body.text group:group from:user];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:)])
+            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:)] && self.currentUser.jid.bareJID != jid.bareJID)
                 [self.delegate didRecieveMessage:body.text from:user];
         }
         else
         {
+            if(self.currentUser.jid.bareJID == jid.bareJID)
+                   return;
             DCTypingState state = DCTypingActive;
             if([element findElement:@"composing"])
                 state = DCTypingComposing;
@@ -609,6 +609,14 @@
                 if([roleType isEqualToString:@"owner"])
                     role = DCGroupRoleOwner;
                 DCXMPPUser *user = self.users[itemJid.bareJID];
+                //user is already in the group, so they must be leaving
+                if([group findUser:user] && user != self.currentUser)
+                {
+                    if([self.delegate respondsToSelector:@selector(userDidLeaveGroup:user:)])
+                        [self.delegate userDidLeaveGroup:group user:user];
+                    [group removeUser:user];
+                    return;
+                }
                 if([itemJid.bareJID isEqualToString:self.currentUser.jid.bareJID])
                     user = self.currentUser;
                 if(!user)
@@ -617,11 +625,13 @@
                     [self.users setObject:user forKey:user.jid.bareJID];
                     [user getVCard];
                     [user getPresence];
-                    NSLog(@"user: %@ is not in our roster....",itemJid.bareJID);
+                    //NSLog(@"user: %@ is not in our roster....",itemJid.bareJID);
                     [group addUser:user role:role];
                 }
                 else
                     [group addUser:user role:role];
+                if([self.delegate respondsToSelector:@selector(userDidJoinGroup:user:)])
+                    [self.delegate userDidJoinGroup:group user:user];
             }
         }
         //NSLog(@"need to finish group element: %@",[element convertToString]);

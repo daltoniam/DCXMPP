@@ -85,6 +85,20 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  */
 -(void)didRecieveGroupTypingState:(DCTypingState)state group:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
 
+/**
+ Notifies when a user joined a group.
+ @param group is what group the message was from
+ @param user is who joined the room
+ */
+-(void)userDidJoinGroup:(DCXMPPGroup*)group user:(DCXMPPUser*)user;
+
+/**
+ Notifies when a user leaves a group.
+ @param group is what group the message was from
+ @param user is who left the room
+ */
+-(void)userDidLeaveGroup:(DCXMPPGroup*)group user:(DCXMPPUser*)user;
+
 ///-------------------------------
 /// @name User Delegate Methods
 ///-------------------------------
