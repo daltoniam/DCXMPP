@@ -24,6 +24,9 @@
 //lock for all the multi threading.
 @property(nonatomic,strong)NSLock *optLock;
 
+//lock for all the delegate multi threading.
+@property(nonatomic,strong)NSLock *delegateLock;
+
 //the max amount of operations that can be run at a time.
 @property(nonatomic,assign)int maxCount;
 
@@ -80,6 +83,8 @@
     self.isCustomConnect = NO;
     if(!self.isConnected)
     {
+        if(!self.delegateLock)
+            self.delegateLock = [NSLock new];
         self.password = password;
         self.userName = userName;
         self.maxCount = 2;
@@ -113,6 +118,8 @@
             [self.delegate didFailXMPPLogin];
         return;
     }
+    if(!self.delegateLock)
+        self.delegateLock = [NSLock new];
     self.boshSID = sid;
     self.maxCount = 2;
     self.host = host;
@@ -357,8 +364,10 @@
             else
             {
                 self.boshSID = nil;
+                [self.delegateLock lock];
                 if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
                     [self.delegate didFailXMPPLogin];
+                [self.delegateLock unlock];
                 return NO;
             }
             
@@ -424,6 +433,7 @@
                 _isConnected = NO;
                 [self.contentQueue removeAllObjects];
                 self.boshSID = nil;
+                NSLog(@"bosh connection terminated: %@",[element convertToString]);
                 if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
                     [self.delegate didFailXMPPLogin];
             }
@@ -435,7 +445,10 @@
             {
                 //NSLog(@"response: %@",[response convertToString]);
                 if([response.attributes[@"id"] isEqualToString:@"roster_1"])
+                {
                     [self handleRosterResponse:[response findElements:@"item"]];
+                    NSLog(@"roster response: %@",[response convertToString]);
+                }
                 else if([response.attributes[@"id"] isEqualToString:@"bookmark_1"])
                     [self handleBookmarksResponse:response];
                 else if([response.name isEqualToString:@"message"] && [response.attributes[@"type"] rangeOfString:@"chat"].location != NSNotFound)
@@ -534,6 +547,7 @@
     }
     if(user)
     {
+        [self.delegateLock lock];
         XMLElement *nameElement = [element findElement:@"fn"];
         if(nameElement && nameElement.text.length > 0)
             user.name = [nameElement.text xmlUnSafe];
@@ -545,6 +559,7 @@
         }
         if([self.delegate respondsToSelector:@selector(didUpdateVCard:)])
             [self.delegate didUpdateVCard:user];
+        [self.delegateLock unlock];
     }
     
 }
@@ -557,6 +572,7 @@
     DCXMPPUser *user = self.users[jid.bareJID];
     if(user)
     {
+        [self.delegateLock lock];
         XMLElement* statusElement = [element findElement:@"status"];
         if(statusElement && !type)
             type = [statusElement.text lowercaseString];
@@ -592,6 +608,7 @@
         
         if([self.delegate respondsToSelector:@selector(didUpdatePresence:)])
             [self.delegate didUpdatePresence:user];
+        [self.delegateLock unlock];
     }
     
     DCXMPPGroup *group = self.groups[jid.bareJID];
@@ -630,8 +647,10 @@
                 }
                 else
                     [group addUser:user role:role];
+                [self.delegateLock lock];
                 if([self.delegate respondsToSelector:@selector(userDidJoinGroup:user:)])
                     [self.delegate userDidJoinGroup:group user:user];
+                [self.delegateLock unlock];
             }
         }
         //NSLog(@"need to finish group element: %@",[element convertToString]);
@@ -681,7 +700,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(long long)currentBoshRID
 {
-    return self.boshRID;
+    return _boshRID;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(NSString*)currentBoshSID

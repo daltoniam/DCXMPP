@@ -144,17 +144,20 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)join
 {
-    DCXMPP *stream = [DCXMPP manager];
-    NSDictionary* attrs = @{@"to": [NSString stringWithFormat:@"%@/%@",self.jid.bareJID,stream.currentUser.jid.name]};
-    XMLElement* element = [XMLElement elementWithName:@"presence" attributes:attrs];
-    
-    XMLElement* xElement = [XMLElement elementWithName:@"x" attributes:@{@"xmlns": XMLNS_MUC}];
-    [element.childern addObject:xElement];
-    
-    XMLElement* history = [XMLElement elementWithName:@"history" attributes:@{@"maxchars": @"0"}];
-    [xElement.childern addObject:history];
-    [stream sendStanza:element];
-    _isJoined = YES;
+    if(!self.isJoined)
+    {
+        DCXMPP *stream = [DCXMPP manager];
+        NSDictionary* attrs = @{@"to": [NSString stringWithFormat:@"%@/%@",self.jid.bareJID,stream.currentUser.jid.name]};
+        XMLElement* element = [XMLElement elementWithName:@"presence" attributes:attrs];
+        
+        XMLElement* xElement = [XMLElement elementWithName:@"x" attributes:@{@"xmlns": XMLNS_MUC}];
+        [element.childern addObject:xElement];
+        
+        XMLElement* history = [XMLElement elementWithName:@"history" attributes:@{@"maxchars": @"0"}];
+        [xElement.childern addObject:history];
+        [stream sendStanza:element];
+        _isJoined = YES;
+    }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)leave
