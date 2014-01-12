@@ -218,4 +218,12 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  */
 -(void)addGroup:(DCXMPPGroup*)group;
 
+
+/**
+ Set the presence of the current user.
+ @param presence: presence type you want to set
+ @param status: status message you want to set.
+ */
+-(void)setPresence:(DCUserPresence)presence status:(NSString*)status;
+
 @end

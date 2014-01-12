@@ -157,6 +157,7 @@
         [xElement.childern addObject:history];
         [stream sendStanza:element];
         _isJoined = YES;
+        NSLog(@"Joined group: %@",self.name);
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,6 +167,7 @@
                                                                                @"to": self.jid.fullJID}];
     [[DCXMPP manager] sendStanza:element];
     _isJoined = NO;
+    [self.userDict removeAllObjects];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
