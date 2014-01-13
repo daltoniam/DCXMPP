@@ -502,10 +502,17 @@
         {
             NSString *groupUserJid = [NSString stringWithFormat:@"%@@%@",jid.resource,self.host];
             user = self.users[groupUserJid];
+            if(!user && [self.currentUser.jid.bareJID hasPrefix:jid.resource])
+                user = self.currentUser;
+                
         }
     }
     else
+    {
         user = self.users[jid.bareJID];
+        if(!user && [self.currentUser.jid.bareJID hasPrefix:jid.bareJID])
+            user = self.currentUser;
+    }
     
     if(user)
     {
@@ -663,7 +670,7 @@
                 
                 if(!user)
                 {
-                    DCXMPPUser *user = [DCXMPPUser userWithJID:itemJidString];
+                    user = [DCXMPPUser userWithJID:itemJidString];
                     user.presence = DCUserPresenceAvailable; //if they are in the group, then the are probably avaliable, just saying
                     [self.users setObject:user forKey:user.jid.bareJID];
                     [user getVCard];
