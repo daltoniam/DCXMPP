@@ -38,7 +38,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 -(void)didRecieveRoster:(NSArray*)users;
 
 /**
- Recieved the roster.
+ Recieved the bookmarks.
  */
 -(void)didRecieveBookmarks;
 
@@ -85,6 +85,20 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  */
 -(void)didRecieveGroupTypingState:(DCTypingState)state group:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
 
+/**
+ Notifies when a user joined a group.
+ @param group is what group the message was from
+ @param user is who joined the room
+ */
+-(void)userDidJoinGroup:(DCXMPPGroup*)group user:(DCXMPPUser*)user;
+
+/**
+ Notifies when a user leaves a group.
+ @param group is what group the message was from
+ @param user is who left the room
+ */
+-(void)userDidLeaveGroup:(DCXMPPGroup*)group user:(DCXMPPUser*)user;
+
 ///-------------------------------
 /// @name User Delegate Methods
 ///-------------------------------
@@ -105,6 +119,18 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 
 
 @interface DCXMPP : NSObject
+
+/**
+ This returns the current bosh RID.
+ @return long long value of the boshRID
+ */
+@property(nonatomic,assign,readonly)long long currentBoshRID;
+
+/**
+ This returns the current bosh SID.
+ @return String value of the boshSID
+ */
+@property(nonatomic,copy,readonly)NSString *currentBoshSID;
 
 /**
  This returns if we are connected to the server or not.
@@ -139,12 +165,19 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  The connect method that starts the xmpp handshake over BOSH.
  @param userName is the username you want to login with.
  @param password is the password of the username.
- @param server is the server to connect to.
- @param port is the port to connect over to the xmpp server for the BOSH server.
  @param host is your host domain.
  @param boshURL is the boshURL to connect to.
  */
 -(void)connect:(NSString*)userName password:(NSString*)password host:(NSString*)host boshURL:(NSString*)boshURL;
+
+/**
+ The connect method is used for a custom persistence option.
+ @param jid is the jid that was saved.
+ @param rid is the rid that was saved.
+ @param host is your host domain.
+ @param boshURL is the boshURL to connect to.
+ */
+-(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL;
 
 
 /**
@@ -152,5 +185,45 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  @param The XMLElement stanza to send.
  */
 -(void)sendStanza:(XMLElement*)element;
+
+/**
+ Queues and sends a message to the user jid.
+ @param text is the text string to send.
+ @param The jid is the jid string of the user to send to.
+ */
+-(void)sendMessage:(NSString *)text jid:(NSString*)jid;
+
+/**
+ Queues and sends a typing state to the user jid.
+ @param state is the state option to send.
+ @param The jid is the jid string of the user to send to.
+ */
+-(void)sendTypingState:(DCTypingState)state jid:(NSString*)jid;
+
+/**
+ Find a DCXMPPUser for a jid
+ @param The jid is the jid string of the user to find.
+ */
+-(DCXMPPUser*)userForJid:(NSString*)jid;
+
+/**
+ Find a DCXMPPGroup for a jid
+ @param The jid is the jid string of the group to find.
+ */
+-(DCXMPPGroup*)groupForJid:(NSString*)jid;
+
+/**
+ Custom use. Adds a group object to the list of groups.
+ @param DCXMPPGroup to add.
+ */
+-(void)addGroup:(DCXMPPGroup*)group;
+
+
+/**
+ Set the presence of the current user.
+ @param presence: presence type you want to set
+ @param status: status message you want to set.
+ */
+-(void)setPresence:(DCUserPresence)presence status:(NSString*)status;
 
 @end

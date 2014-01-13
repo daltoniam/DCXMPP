@@ -80,7 +80,7 @@
     DCXMPP *stream = [DCXMPP manager];
     NSMutableDictionary* attrs = [NSMutableDictionary dictionaryWithCapacity:4];
     [attrs setObject:stream.currentUser.jid.fullJID forKey:@"from"];
-    [attrs setObject:@"vcard_get_1" forKey:@"id"];
+    [attrs setObject:[NSString stringWithFormat:@"vcard_get_%@",self.jid.name] forKey:@"id"];
     [attrs setObject:@"get" forKey:@"type"];
     if(![self.jid.bareJID isEqualToString:stream.currentUser.jid.bareJID])
         [attrs setObject:self.jid.fullJID forKey:@"to"];
@@ -106,6 +106,11 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+@interface DCXMPPGroup ()
+
+@property(nonatomic,strong)NSMutableDictionary *userDict;
+
+@end
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 @implementation DCXMPPGroup
 
@@ -120,19 +125,40 @@
     return [[DCXMPPGroup alloc] initWithJID:jid];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)addUser:(DCXMPPUser*)user role:(DCGroupRole)role
+{
+    if(!self.userDict)
+        self.userDict = [NSMutableDictionary new];
+    self.userDict[user.jid.bareJID] = [DCXMPPGroupUser groupUser:user role:role];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)removeUser:(DCXMPPUser*)user
+{
+    [self.userDict removeObjectForKey:user.jid.bareJID];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(DCXMPPGroupUser*)findUser:(DCXMPPUser*)user
+{
+    return self.userDict[user.jid.bareJID];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)join
 {
-    DCXMPP *stream = [DCXMPP manager];
-    NSDictionary* attrs = @{@"to": [NSString stringWithFormat:@"%@/%@",self.jid.bareJID,stream.currentUser.jid.name]};
-    XMLElement* element = [XMLElement elementWithName:@"presence" attributes:attrs];
-    
-    XMLElement* xElement = [XMLElement elementWithName:@"x" attributes:@{@"xmlns": XMLNS_MUC}];
-    [element.childern addObject:xElement];
-    
-    XMLElement* history = [XMLElement elementWithName:@"history" attributes:@{@"maxchars": @"0"}];
-    [xElement.childern addObject:history];
-    [stream sendStanza:element];
-    _isJoined = YES;
+    if(!self.isJoined)
+    {
+        DCXMPP *stream = [DCXMPP manager];
+        NSDictionary* attrs = @{@"to": [NSString stringWithFormat:@"%@/%@",self.jid.bareJID,stream.currentUser.jid.name]};
+        XMLElement* element = [XMLElement elementWithName:@"presence" attributes:attrs];
+        
+        XMLElement* xElement = [XMLElement elementWithName:@"x" attributes:@{@"xmlns": XMLNS_MUC}];
+        [element.childern addObject:xElement];
+        
+        XMLElement* history = [XMLElement elementWithName:@"history" attributes:@{@"maxchars": @"0"}];
+        [xElement.childern addObject:history];
+        [stream sendStanza:element];
+        _isJoined = YES;
+        NSLog(@"Joined group: %@",self.name);
+    }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)leave
@@ -141,6 +167,7 @@
                                                                                @"to": self.jid.fullJID}];
     [[DCXMPP manager] sendStanza:element];
     _isJoined = NO;
+    [self.userDict removeAllObjects];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -188,6 +215,7 @@
         range = [host rangeOfString:@"/"];
         if(range.location != NSNotFound)
             return [host substringToIndex:range.location];
+        return host;
     }
     return nil;
 }
@@ -203,6 +231,29 @@
 +(DCXMPPJID*)jidWithString:(NSString*)jid
 {
     return [[DCXMPPJID alloc] initWithJID:jid];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+@end
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+@implementation DCXMPPGroupUser
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
++(DCXMPPGroupUser*)groupUser:(DCXMPPUser*)user role:(DCGroupRole)role
+{
+    DCXMPPGroupUser *groupUser = [DCXMPPGroupUser new];
+    groupUser.user = user;
+    groupUser.role = role;
+    return groupUser;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(BOOL)isOwner
+{
+    if(self.role == DCGroupRoleOwner)
+        return YES;
+    return NO;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
