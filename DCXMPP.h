@@ -218,6 +218,12 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  */
 -(void)addGroup:(DCXMPPGroup*)group;
 
+/**
+ Custom use. Adds a user object to the list of users.
+ @param DCXMPPUser to add.
+ */
+-(void)addUser:(DCXMPPUser*)user;
+
 
 /**
  Set the presence of the current user.

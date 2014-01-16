@@ -129,7 +129,7 @@
     _currentUser = [DCXMPPUser userWithJID:jid];
     _currentUser.presence = DCUserPresenceAvailable;
     _isConnected = YES;
-    [self setPresence:DCUserPresenceAvailable status:nil];
+    //[self setPresence:DCUserPresenceAvailable status:nil];
     [self getRoster];
     //[self getBookmarks];
     if([self.delegate respondsToSelector:@selector(didXMPPConnect)])
@@ -152,6 +152,14 @@
         self.groups = [[NSMutableDictionary alloc] init];
     if(!self.groups[group.jid.bareJID])
         [self.groups setObject:group forKey:group.jid.bareJID];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)addUser:(DCXMPPUser*)user
+{
+    if(!self.users)
+        self.users = [[NSMutableDictionary alloc] init];
+    if(!self.users[user.jid.bareJID])
+        [self.users setObject:user forKey:user.jid.bareJID];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //roster processing
@@ -338,7 +346,7 @@
     self.optCount--;
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
-    NSLog(@"Recieving: %@\n\n",[element convertToString]);
+    //NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
         [self dequeue];
 }
@@ -535,18 +543,19 @@
         XMLElement *body = [element findElement:@"body"];
         if(body && body.text)
         {
+            NSString *text = [body.text xmlUnSafe];
             if(group)
             {
                 if(self.currentUser.jid.bareJID == user.jid.bareJID)
                 {
                     if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:uuid:)])
-                        [self.delegate didRecieveGroupCarbon:body.text group:group from:user uuid:uuid];
+                        [self.delegate didRecieveGroupCarbon:text group:group from:user uuid:uuid];
                 }
                 else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:uuid:)])
-                    [self.delegate didRecieveGroupMessage:body.text group:group from:user uuid:uuid];
+                    [self.delegate didRecieveGroupMessage:text group:group from:user uuid:uuid];
             }
             else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:)] && self.currentUser.jid.bareJID != jid.bareJID)
-                [self.delegate didRecieveMessage:body.text from:user uuid:uuid];
+                [self.delegate didRecieveMessage:text from:user uuid:uuid];
         }
         else
         {
