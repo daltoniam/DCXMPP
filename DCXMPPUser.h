@@ -89,6 +89,12 @@ typedef enum {
 @property(nonatomic,copy)NSString *name;
 
 /**
+ This returns the 'nickname' of the user from the vcard.
+ @return The vcard nickname of the user.
+ */
+@property(nonatomic,copy)NSString *nickname;
+
+/**
  This returns the image hash of the user.
  @return The image hash of the user.
  */
@@ -140,7 +146,7 @@ typedef enum {
  This sends a message to the user. XEP-0022
  @param the text of the message you want to send.
  */
--(void)sendMessage:(NSString*)text;
+-(NSString*)sendMessage:(NSString*)text;
 
 
 /**

@@ -132,7 +132,6 @@
     [self setPresence:DCUserPresenceAvailable status:nil];
     [self getRoster];
     //[self getBookmarks];
-    [self.currentUser getVCard];
     if([self.delegate respondsToSelector:@selector(didXMPPConnect)])
         [self.delegate didXMPPConnect];
 }
@@ -192,6 +191,7 @@
     if([self.delegate respondsToSelector:@selector(didRecieveRoster:)])
         [self.delegate didRecieveRoster:self.roster];
     [self setPresence:DCUserPresenceAvailable status:nil];
+    [self.currentUser getVCard];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //bookmark processing
@@ -237,7 +237,7 @@
         [self addContent:element];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)sendMessage:(NSString *)text jid:(NSString*)jid
+-(NSString*)sendMessage:(NSString *)text jid:(NSString*)jid
 {
     if(self.isConnected)
     {
@@ -245,8 +245,9 @@
         if(!user)
             user = self.groups[jid];
         if(user)
-            [user sendMessage:text];
+            return [user sendMessage:text];
     }
+    return nil;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)sendTypingState:(DCTypingState)state jid:(NSString*)jid
@@ -337,7 +338,7 @@
     self.optCount--;
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
-    //NSLog(@"Recieving: %@\n\n",[element convertToString]);
+    NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
         [self dequeue];
 }
@@ -482,6 +483,7 @@
 -(void)handleMessageResponse:(XMLElement*)element
 {
     NSString *jidString = element.attributes[@"from"];
+    NSString *uuid = element.attributes[@"id"];
     DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
     
     XMLElement* xElement = [element findElement:@"x"];
@@ -504,6 +506,20 @@
             user = self.users[groupUserJid];
             if(!user && [self.currentUser.jid.bareJID hasPrefix:jid.resource])
                 user = self.currentUser;
+            if(!user)
+            {
+                //maybe it is from a different host than ours
+                for(id key in self.users)
+                {
+                    if([key hasPrefix:jid.resource])
+                    {
+                        user = self.users[key];
+                        break;
+                    }
+                }
+            }
+            if(user.presence == DCUserPresenceUnAvailable)
+                user.presence = DCUserPresenceAvailable;
                 
         }
     }
@@ -523,14 +539,14 @@
             {
                 if(self.currentUser.jid.bareJID == user.jid.bareJID)
                 {
-                    if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:)])
-                        [self.delegate didRecieveGroupCarbon:body.text group:group from:user];
+                    if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:uuid:)])
+                        [self.delegate didRecieveGroupCarbon:body.text group:group from:user uuid:uuid];
                 }
-                else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:)])
-                    [self.delegate didRecieveGroupMessage:body.text group:group from:user];
+                else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:uuid:)])
+                    [self.delegate didRecieveGroupMessage:body.text group:group from:user uuid:uuid];
             }
             else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:)] && self.currentUser.jid.bareJID != jid.bareJID)
-                [self.delegate didRecieveMessage:body.text from:user];
+                [self.delegate didRecieveMessage:body.text from:user uuid:uuid];
         }
         else
         {
@@ -551,7 +567,7 @@
                 if([self.delegate respondsToSelector:@selector(didRecieveGroupTypingState:group:from:)])
                     [self.delegate didRecieveGroupTypingState:state group:group from:user];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveTypingState:from:)])
+            else if([self.delegate respondsToSelector:@selector(didRecieveTypingState:from:uuid:)])
                 [self.delegate didRecieveTypingState:state from:user];
         }
     }
@@ -573,7 +589,9 @@
         [self.delegateLock lock];
         XMLElement *nameElement = [element findElement:@"fn"];
         if(nameElement && nameElement.text.length > 0)
-            user.name = [nameElement.text xmlUnSafe];
+            user.nickname = [nameElement.text xmlUnSafe];
+        if(user == self.currentUser)
+            user.name = user.nickname;
         NSString* string = [element findElement:@"binval"].text;
         if(string)
         {
@@ -593,6 +611,8 @@
     NSString *jidString = element.attributes[@"from"];
     DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
     DCXMPPUser *user = self.users[jid.bareJID];
+    if(!user && [jid.bareJID isEqualToString:self.currentUser.jid.bareJID])
+        user = self.currentUser;
     if(user)
     {
         [self.delegateLock lock];

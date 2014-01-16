@@ -8,6 +8,7 @@
 
 #import "DCXMPPUser.h"
 #import "DCXMPP.h"
+#import <CommonCrypto/CommonDigest.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -43,11 +44,12 @@
     return NO;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)sendMessage:(NSString*)text
+-(NSString*)sendMessage:(NSString*)text
 {
     DCXMPP *stream = [DCXMPP manager];
+    NSString *uuid = [DCXMPPUser createUUID:stream.currentUser.jid.bareJID user:self.jid.bareJID];
     NSDictionary* attrs = @{@"to": self.jid.fullJID, @"from": stream.currentUser.jid.fullJID,
-                            @"type": [[self class] chatType]};
+                            @"type": [[self class] chatType], @"id": uuid};
     XMLElement* element = [XMLElement elementWithName:@"message" attributes:attrs];
     XMLElement* body = [XMLElement elementWithName:@"body" attributes:nil];
     XMLElement* active = [XMLElement elementWithName:@"active" attributes:@{@"xmlns": XMLNS_CHAT_STATE}];
@@ -55,6 +57,7 @@
     [element.childern addObject:body];
     [element.childern addObject:active];
     [stream sendStanza:element];
+    return uuid;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)sendTypingState:(DCTypingState)state
@@ -99,6 +102,23 @@
 +(NSString*)chatType
 {
     return @"chat";
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
++(NSString*)createUUID:(NSString*)currentJID user:(NSString*)userJID
+{
+    return [DCXMPPUser sha1HexDigest:[NSString stringWithFormat:@"%@-%@-%f",currentJID,userJID,CFAbsoluteTimeGetCurrent()]];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
++ (NSString*)sha1HexDigest:(NSString*)input //md5HexDigest
+{
+    const char* str = [input UTF8String];
+    unsigned char result[CC_SHA1_DIGEST_LENGTH];
+    CC_SHA1(str, strlen(str), result);
+    
+    NSMutableString *ret = [NSMutableString stringWithCapacity:CC_SHA1_DIGEST_LENGTH*2];
+    for(int i = 0; i<CC_SHA1_DIGEST_LENGTH; i++)
+        [ret appendFormat:@"%02x",result[i]];
+    return ret;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

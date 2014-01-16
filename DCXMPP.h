@@ -52,7 +52,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @param message is the text of the message.
  @param user is who the message was from
  */
--(void)didRecieveMessage:(NSString*)message from:(DCXMPPUser*)user;
+-(void)didRecieveMessage:(NSString*)message from:(DCXMPPUser*)user uuid:(NSString*)uuid;
 
 /**
  Recieved a message.
@@ -60,7 +60,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @param group is what group the message was from
  @param user is who the message was from
  */
--(void)didRecieveGroupMessage:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
+-(void)didRecieveGroupMessage:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user uuid:(NSString*)uuid;
 
 /**
  Recieved a message that is from the current user, probably from another client
@@ -68,7 +68,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @param group is what group the message was from
  @param user is who the message was from. This would be the current user
  */
--(void)didRecieveGroupCarbon:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
+-(void)didRecieveGroupCarbon:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user uuid:(NSString*)uuid;
 
 /**
  Recieved a message.
@@ -191,7 +191,7 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  @param text is the text string to send.
  @param The jid is the jid string of the user to send to.
  */
--(void)sendMessage:(NSString *)text jid:(NSString*)jid;
+-(NSString*)sendMessage:(NSString *)text jid:(NSString*)jid;
 
 /**
  Queues and sends a typing state to the user jid.
