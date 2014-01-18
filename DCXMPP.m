@@ -136,6 +136,23 @@
         [self.delegate didXMPPConnect];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)disconnect
+{
+    _isConnected = NO;
+    [self.contentQueue removeAllObjects];
+    [self.groups removeAllObjects];
+    [self.rosterUsers removeAllObjects];
+    [self.users removeAllObjects];
+    self.groups = nil;
+    self.rosterUsers = nil;
+    self.users = nil;
+    _currentUser = nil;
+    [self setPresence:DCUserPresenceUnAvailable status:nil];
+    self.boshRID = 0;
+    self.boshSID = nil;
+    
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
 -(DCXMPPUser*)userForJid:(NSString*)jid
 {
     return self.users[jid];
@@ -346,7 +363,7 @@
     self.optCount--;
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
-    //NSLog(@"Recieving: %@\n\n",[element convertToString]);
+    NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
         [self dequeue];
 }
@@ -356,7 +373,8 @@
     [self.optLock lock];
     self.optCount--;
     [self.optLock unlock];
-    [self dequeue];
+    if(self.isConnected)
+        [self dequeue];
     //NSLog(@"request time out");
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -554,7 +572,7 @@
                 else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:uuid:)])
                     [self.delegate didRecieveGroupMessage:text group:group from:user uuid:uuid];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:)] && self.currentUser.jid.bareJID != jid.bareJID)
+            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:uuid:)] && self.currentUser.jid.bareJID != jid.bareJID)
                 [self.delegate didRecieveMessage:text from:user uuid:uuid];
         }
         else
@@ -576,7 +594,7 @@
                 if([self.delegate respondsToSelector:@selector(didRecieveGroupTypingState:group:from:)])
                     [self.delegate didRecieveGroupTypingState:state group:group from:user];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveTypingState:from:uuid:)])
+            else if([self.delegate respondsToSelector:@selector(didRecieveTypingState:from:)])
                 [self.delegate didRecieveTypingState:state from:user];
         }
     }
@@ -756,9 +774,12 @@
         attrs = @{@"xmlns": @"jabber:client"};
     XMLElement* element = [XMLElement elementWithName:@"presence" attributes:attrs];
     
-    XMLElement* proElement = [XMLElement elementWithName:@"priority" attributes:nil];
-    proElement.text = [NSString stringWithFormat:@"%d",0];
-    [element.childern addObject:proElement];
+    if(presence != DCUserPresenceUnAvailable)
+    {
+        XMLElement* proElement = [XMLElement elementWithName:@"priority" attributes:nil];
+        proElement.text = [NSString stringWithFormat:@"%d",0];
+        [element.childern addObject:proElement];
+    }
     
     if(presence != DCUserPresenceAvailable)
     {
@@ -767,6 +788,8 @@
             show.text = @"away";
         else if(presence == DCUserPresenceBusy)
             show.text = @"dnd";
+        else if(presence == DCUserPresenceUnAvailable)
+            show.text = @"unavailable";
         //else
         //    show.text = @"chat";
         [element.childern addObject:show];
@@ -783,7 +806,7 @@
             [element.childern addObject:statusElement];
         }
     }
-    if(self.currentUser.avatarData)
+    if(self.currentUser.avatarData && presence != DCUserPresenceAvailable)
     {
         XMLElement* xElement = [XMLElement elementWithName:@"x" attributes:@{@"xmlns": @"vcard-temp:x:update"}];
         XMLElement* photoElement = [XMLElement elementWithName:@"photo" attributes:nil];

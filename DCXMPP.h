@@ -179,6 +179,10 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  */
 -(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL;
 
+/**
+ Disconnect and terminate communication from the xmpp server.
+ */
+-(void)disconnect;
 
 /**
  Queues and sends an arbitrary stanza.
@@ -231,5 +235,6 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  @param status: status message you want to set.
  */
 -(void)setPresence:(DCUserPresence)presence status:(NSString*)status;
+
 
 @end
