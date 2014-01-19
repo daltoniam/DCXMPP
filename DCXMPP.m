@@ -103,7 +103,9 @@
                                      @"xmpp:version": @"1.0",
                                      @"xmlns:xmpp": @"urn:xmpp:xbosh"};
         XMLElement *content = [XMLElement elementWithName:@"body" attributes:attributes];
-        [self addContent:content];
+        NSURLRequest *request = [self createRequest:[content convertToString] timeout:self.timeout-1];
+        [self sendRequest:request];
+        //[self addContent:content];
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -291,58 +293,55 @@
 {
     if(!self.contentQueue)
         self.contentQueue = [NSMutableArray new];
-    if(![element.name isEqualToString:@"body"])
-    {
-        if(!self.boshSID)
-            NSLog(@"Error: boshSID: %@",[element convertToString]);
-        XMLElement *body = [XMLElement elementWithName:@"body"
-                                            attributes:@{@"rid": [NSString stringWithFormat:@"%lld",self.boshRID],
-                                                         @"sid": self.boshSID,@"xmlns": XMLNS_BOSH}];
-        [body.childern addObject:element];
-        [self.contentQueue addObject:body];
-        //NSLog(@"Sending: %@",[body convertToString]);
-    }
-    else
-    {
-        [self.contentQueue addObject:element];
-        //NSLog(@"Sending: %@",[element convertToString]);
-    }
+    [self.contentQueue addObject:element];
     [self dequeue];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)dequeue
 {
-    [self dequeue:self.timeout];
+    [self dequeue:self.timeout-1];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)dequeue:(int)timeout
+-(void)dequeue:(int)time
 {
     if(self.optCount < self.maxCount)
     {
         NSString *postText = nil;
         if(self.contentQueue.count > 0)
         {
-            postText = [self.contentQueue[0] convertToString];
-            [self.contentQueue removeObjectAtIndex:0];
+            if(!self.boshSID)
+                NSLog(@"Error: boshSID: %@",self.boshSID);
+            XMLElement *body = [XMLElement elementWithName:@"body"
+                                                attributes:@{@"rid": [NSString stringWithFormat:@"%lld",self.boshRID],
+                                                             @"sid": self.boshSID,@"xmlns": XMLNS_BOSH}];
+            for(XMLElement *content in self.contentQueue)
+                [body.childern addObject:content];
+            [self.contentQueue removeAllObjects];
+            postText = [body convertToString];
         }
         else
         {
             postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
         }
-        
-        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:self.boshURL]];
-        [request setTimeoutInterval:self.timeout];
-        NSData *postBody = [postText dataUsingEncoding:NSUTF8StringEncoding];
-        unsigned long long postLength = postBody.length;
-        NSString *contentLength = [NSString stringWithFormat:@"%llu", postLength];
-        [request addValue:contentLength forHTTPHeaderField:@"Content-Length"];
-        [request addValue:@"text/xml; charset=utf-8" forHTTPHeaderField:@"Content-Type"];
-        [request addValue:@"text/xml" forHTTPHeaderField:@"Accept"];
-        [request addValue:@"gzip" forHTTPHeaderField:@"Accept-Encoding"];
-        [request setHTTPMethod:@"POST"];
-        [request setHTTPBody:postBody];
+        NSURLRequest *request = [self createRequest:postText timeout:time];
         [self sendRequest:request];
     }
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(NSURLRequest*)createRequest:(NSString*)postText timeout:(int)time
+{
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:self.boshURL]];
+    [request setTimeoutInterval:time];
+    NSData *postBody = [postText dataUsingEncoding:NSUTF8StringEncoding];
+    unsigned long long postLength = postBody.length;
+    NSString *contentLength = [NSString stringWithFormat:@"%llu", postLength];
+    [request addValue:contentLength forHTTPHeaderField:@"Content-Length"];
+    [request addValue:@"text/xml; charset=utf-8" forHTTPHeaderField:@"Content-Type"];
+    [request addValue:@"text/xml" forHTTPHeaderField:@"Accept"];
+    [request addValue:@"gzip" forHTTPHeaderField:@"Accept-Encoding"];
+    [request setHTTPMethod:@"POST"];
+    [request setHTTPBody:postBody];
+    return request;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)sendRequest:(NSURLRequest*)request
@@ -398,7 +397,8 @@
                                                                     @"xmlns": XMLNS_BOSH,
                                                                     @"xmpp:version": @"1.0",
                                                                     @"xmlns:xmpp": @"urn:xmpp:xbosh"}];
-                [self addContent:element];
+                NSURLRequest *request = [self createRequest:[element convertToString] timeout:self.timeout-1];
+                [self sendRequest:request];
                 
                 self.isAuthing = NO;
             }
