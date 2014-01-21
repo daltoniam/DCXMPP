@@ -48,7 +48,7 @@
 {
     DCXMPP *stream = [DCXMPP manager];
     NSString *uuid = [DCXMPPUser createUUID:stream.currentUser.jid.bareJID user:self.jid.bareJID];
-    NSDictionary* attrs = @{@"to": self.jid.fullJID, @"from": stream.currentUser.jid.fullJID,
+    NSDictionary* attrs = @{@"to": [self sendJid], @"from": stream.currentUser.jid.fullJID,
                             @"type": [[self class] chatType], @"id": uuid};
     XMLElement* element = [XMLElement elementWithName:@"message" attributes:attrs];
     XMLElement* body = [XMLElement elementWithName:@"body" attributes:nil];
@@ -62,7 +62,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)sendTypingState:(DCTypingState)state
 {
-    NSDictionary* attrs = @{@"to": self.jid.fullJID,
+    NSDictionary* attrs = @{@"to": [self sendJid],
                             @"type": [[self class] chatType]};
     XMLElement* element = [XMLElement elementWithName:@"message" attributes:attrs];
     NSString* name = @"active";
@@ -76,6 +76,14 @@
     XMLElement* stateElement = [XMLElement elementWithName:name attributes:@{@"xmlns": XMLNS_CHAT_STATE}];
     [element.childern addObject:stateElement];
     [[DCXMPP manager] sendStanza:element];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(NSString*)sendJid
+{
+    NSString *sendJid = self.jid.fullJID;
+    if([sendJid rangeOfString:@"/"].location == NSNotFound && self.lastResource && self.lastResource.length > 0)
+        sendJid = [sendJid stringByAppendingFormat:@"/%@",self.lastResource];
+    return sendJid;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)getVCard
@@ -142,7 +150,8 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 +(DCXMPPGroup*)groupWithJID:(NSString*)jid
 {
-    return [[DCXMPPGroup alloc] initWithJID:jid];
+    DCXMPPGroup *group = [[DCXMPPGroup alloc] initWithJID:jid];
+    return group;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)addUser:(DCXMPPUser*)user role:(DCGroupRole)role
@@ -177,7 +186,7 @@
         [xElement.childern addObject:history];
         [stream sendStanza:element];
         _isJoined = YES;
-        NSLog(@"Joined group: %@",self.name);
+        //NSLog(@"Joined xmpp group: %@ name: %@",self,self.name);
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,6 +196,7 @@
                                                                                @"to": self.jid.fullJID}];
     [[DCXMPP manager] sendStanza:element];
     _isJoined = NO;
+    //NSLog(@"left xmpp group: %@ name: %@",self,self.name);
     [self.userDict removeAllObjects];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////

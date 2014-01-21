@@ -131,6 +131,12 @@ typedef enum {
 @property(nonatomic,assign)BOOL isCurrentUser;
 
 /**
+ The last resource is the client we talked.
+ @return The the last client resource we chatted with.
+ */
+@property(nonatomic,copy)NSString *lastResource;
+
+/**
  This initializes and returns a DCXMPPUser object.
  @param jid is the string representation of the jid.
  @return A new DCXMPPUser object.

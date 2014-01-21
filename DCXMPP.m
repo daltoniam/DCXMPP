@@ -169,8 +169,9 @@
 {
     if(!self.groups)
         self.groups = [[NSMutableDictionary alloc] init];
-    if(!self.groups[group.jid.bareJID])
-        [self.groups setObject:group forKey:group.jid.bareJID];
+    if(self.groups[group.jid.bareJID])
+        [self.groups removeObjectForKey:group.jid.bareJID];
+    [self.groups setObject:group forKey:group.jid.bareJID];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)addUser:(DCXMPPUser*)user
@@ -362,9 +363,14 @@
     self.optCount--;
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
-    NSLog(@"Recieving: %@\n\n",[element convertToString]);
+    //NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
-        [self dequeue];
+    {
+        if(self.optCount > 0)
+            [self dequeue:self.timeout-0.5];
+        else
+            [self dequeue];
+    }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFailed:(BoshRequest*)request
@@ -558,6 +564,7 @@
     
     if(user)
     {
+        user.lastResource = jid.resource;
         XMLElement *body = [element findElement:@"body"];
         if(body && body.text)
         {
@@ -643,6 +650,7 @@
     if(user)
     {
         [self.delegateLock lock];
+        user.lastResource = nil;
         XMLElement* statusElement = [element findElement:@"status"];
         if(statusElement && !type)
             type = [statusElement.text lowercaseString];
