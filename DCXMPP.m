@@ -45,6 +45,9 @@
 //the timeout of how long a connection can stay open.
 @property(nonatomic,assign)int timeout;
 
+//the inactivity of the empty request.
+@property(nonatomic,assign)int inactivity;
+
 //the username of the person logging in
 @property(nonatomic,copy)NSString *userName;
 
@@ -91,6 +94,7 @@
         self.host = host;
         self.boshURL = boshURL;
         self.timeout = 5;
+        self.inactivity = 60;
         self.boshRID = [self generateRid];
         NSDictionary *attributes = @{@"content": @"text/xml; charset=utf-8",
                                      @"hold": @"3",
@@ -126,6 +130,7 @@
     self.maxCount = 2;
     self.host = host;
     self.timeout = 5;
+    self.inactivity = 60;
     self.boshURL = boshURL;
     self.boshRID = rid;
     _currentUser = [DCXMPPUser userWithJID:jid];
@@ -300,13 +305,9 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)dequeue
 {
-    [self dequeue:self.timeout-1];
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)dequeue:(int)time
-{
     if(self.optCount < self.maxCount)
     {
+        int time = self.timeout;
         NSString *postText = nil;
         if(self.contentQueue.count > 0)
         {
@@ -322,6 +323,9 @@
         }
         else
         {
+            if(self.optCount > 0)
+                return;
+            time = self.inactivity;
             postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
         }
         NSURLRequest *request = [self createRequest:postText timeout:time];
@@ -365,12 +369,7 @@
     XMLElement* element = [request responseElement];
     //NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
-    {
-        if(self.optCount > 0)
-            [self dequeue:self.timeout-0.5];
-        else
-            [self dequeue];
-    }
+        [self dequeue];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFailed:(BoshRequest*)request
@@ -465,6 +464,10 @@
             NSString *polling = element.attributes[@"polling"];
             if(polling)
                 self.timeout = [polling intValue];
+            
+            NSString *inactivityString = element.attributes[@"inactivity"];
+            if(inactivityString)
+                self.inactivity = [inactivityString intValue];
 
             XMLElement* features = [element findElement:@"stream:features"];
             if(features)
@@ -755,6 +758,7 @@
     if(self.isConnected)
     {
         XMLElement* element = [self buildPresence:presence status:status to:jid];
+        [self addContent:element];
         if(!jid)
         {
             for(id key in self.groups)
@@ -762,14 +766,15 @@
                 DCXMPPGroup *group = self.groups[key];
                 if(group.isJoined)
                 {
-                    [element.childern addObject:[self buildPresence:presence status:status to:group.jid.bareJID]];
+                    [self addContent:[self buildPresence:presence status:status to:group.jid.bareJID]];
+                    //[element.childern addObject:[self buildPresence:presence status:status to:group.jid.bareJID]];
                     //content = [content stringByAppendingString:[self buildPresence:presence status:status to:group.jid.bareJID]];
                 }
             }
         }
         self.currentUser.status = status;
         self.currentUser.presence = presence;
-        [self addContent:element];
+        //[self addContent:element];
     }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
