@@ -36,6 +36,11 @@
 @property(nonatomic,assign)id<BoshRequestDelegate>delegate;
 
 /**
+ Assign this to implement the BoshRequest delegate methods.
+ */
+@property(nonatomic,assign)BOOL isEmpty;
+
+/**
  initializes and returns a new BoshRequest.
  @param request is the NSURLRequest you created.
  */
@@ -45,6 +50,11 @@
  starts the BOSH request.
  */
 -(void)start;
+
+/**
+ stops the BOSH request.
+ */
+-(void)cancel;
 
 /**
  This request a XMLElement object from the responseData of the request.

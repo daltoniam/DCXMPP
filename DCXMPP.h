@@ -52,7 +52,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @param message is the text of the message.
  @param user is who the message was from
  */
--(void)didRecieveMessage:(NSString*)message from:(DCXMPPUser*)user uuid:(NSString*)uuid;
+-(void)didRecieveMessage:(NSString*)message from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
 
 /**
  Recieved a message.
@@ -60,7 +60,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @param group is what group the message was from
  @param user is who the message was from
  */
--(void)didRecieveGroupMessage:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user uuid:(NSString*)uuid;
+-(void)didRecieveGroupMessage:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
 
 /**
  Recieved a message that is from the current user, probably from another client
@@ -68,7 +68,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @param group is what group the message was from
  @param user is who the message was from. This would be the current user
  */
--(void)didRecieveGroupCarbon:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user uuid:(NSString*)uuid;
+-(void)didRecieveGroupCarbon:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
 
 /**
  Recieved a message.
@@ -235,6 +235,13 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  @param status: status message you want to set.
  */
 -(void)setPresence:(DCUserPresence)presence status:(NSString*)status;
+
+/**
+ Add a cookie to send in the request headers of your requests.
+ @param val: value/cookie to send
+ @param ke: key of the cookie.
+ */
+-(void)addCookie:(NSString*)val forKey:(NSString*)key;
 
 
 @end

@@ -30,6 +30,9 @@
 //the max amount of operations that can be run at a time.
 @property(nonatomic,assign)int maxCount;
 
+//the reqeust currently running
+@property(nonatomic,strong)NSMutableArray *requestArray;
+
 //this is the bosh rid
 @property(nonatomic,assign)long long boshRID;
 
@@ -48,6 +51,9 @@
 //the inactivity of the empty request.
 @property(nonatomic,assign)int inactivity;
 
+//the listening boolean
+@property(nonatomic,assign)BOOL isListening;
+
 //the username of the person logging in
 @property(nonatomic,copy)NSString *userName;
 
@@ -65,6 +71,9 @@
 
 //The users in the current user's groups
 @property(nonatomic,strong)NSMutableDictionary *groups;
+
+//cookies to send in your bosh requests
+@property(nonatomic,strong)NSMutableDictionary *cookies;
 
 @end
 
@@ -108,7 +117,7 @@
                                      @"xmlns:xmpp": @"urn:xmpp:xbosh"};
         XMLElement *content = [XMLElement elementWithName:@"body" attributes:attributes];
         NSURLRequest *request = [self createRequest:[content convertToString] timeout:self.timeout-1];
-        [self sendRequest:request];
+        [self sendRequest:request isEmpty:NO];
         //[self addContent:content];
     }
 }
@@ -130,7 +139,7 @@
     self.maxCount = 2;
     self.host = host;
     self.timeout = 5;
-    self.inactivity = 60;
+    self.inactivity = 14400;
     self.boshURL = boshURL;
     self.boshRID = rid;
     _currentUser = [DCXMPPUser userWithJID:jid];
@@ -141,6 +150,15 @@
     //[self getBookmarks];
     if([self.delegate respondsToSelector:@selector(didXMPPConnect)])
         [self.delegate didXMPPConnect];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)sharedConnect
+{
+    /*[[NSNotificationCenter defaultCenter]
+     addObserver:self
+     selector:@selector(background)
+     name:UIApplicationWillResignActiveNotification
+     object:NULL];*/
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)disconnect
@@ -300,19 +318,19 @@
     if(!self.contentQueue)
         self.contentQueue = [NSMutableArray new];
     [self.contentQueue addObject:element];
-    [self dequeue];
+    [self dequeue:NO];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)dequeue
+-(void)dequeue:(BOOL)isEmpty
 {
+    if(!self.boshSID)
+        return;
     if(self.optCount < self.maxCount)
     {
         int time = self.timeout;
         NSString *postText = nil;
-        if(self.contentQueue.count > 0)
+        if(self.contentQueue.count > 0 && !isEmpty)
         {
-            if(!self.boshSID)
-                NSLog(@"Error: boshSID: %@",self.boshSID);
             XMLElement *body = [XMLElement elementWithName:@"body"
                                                 attributes:@{@"rid": [NSString stringWithFormat:@"%lld",self.boshRID],
                                                              @"sid": self.boshSID,@"xmlns": XMLNS_BOSH}];
@@ -323,19 +341,30 @@
         }
         else
         {
-            if(self.optCount > 0)
+            if(self.isListening)
                 return;
+            self.isListening = isEmpty = YES;
+            //NSLog(@"opened listening connection...");
             time = self.inactivity;
             postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
         }
+        //NSLog(@"sending: %@",postText);
         NSURLRequest *request = [self createRequest:postText timeout:time];
-        [self sendRequest:request];
+        [self sendRequest:request isEmpty:isEmpty];
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(NSURLRequest*)createRequest:(NSString*)postText timeout:(int)time
 {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:self.boshURL]];
+    for(NSString* key in self.cookies)
+    {
+        NSString* check = [request valueForHTTPHeaderField:key];
+        if(!check)
+            [request addValue:self.cookies[key] forHTTPHeaderField:key];
+        else
+            [request setValue:self.cookies[key] forHTTPHeaderField:key];
+    }
     [request setTimeoutInterval:time];
     NSData *postBody = [postText dataUsingEncoding:NSUTF8StringEncoding];
     unsigned long long postLength = postBody.length;
@@ -349,15 +378,19 @@
     return request;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)sendRequest:(NSURLRequest*)request
+-(void)sendRequest:(NSURLRequest*)request isEmpty:(BOOL)isempty
 {
     if(!self.optLock)
         self.optLock = [[NSLock alloc] init];
+    BoshRequest* opt = [[BoshRequest alloc] initWithRequest:request];
+    opt.isEmpty = isempty;
+    opt.delegate = (id<BoshRequestDelegate>)self;
     [self.optLock lock];
     self.optCount++;
+    if(!self.requestArray)
+        self.requestArray = [[NSMutableArray alloc] init];
+    [self.requestArray addObject:opt];
     [self.optLock unlock];
-    BoshRequest* opt = [[BoshRequest alloc] initWithRequest:request];
-    opt.delegate = (id<BoshRequestDelegate>)self;
     [opt start];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -365,20 +398,30 @@
 {
     [self.optLock lock];
     self.optCount--;
+    [self.requestArray removeObject:request];
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
     //NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
-        [self dequeue];
+    {
+        if(request.isEmpty)
+            self.isListening = NO;
+        [self dequeue:request.isEmpty];
+    }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFailed:(BoshRequest*)request
 {
     [self.optLock lock];
     self.optCount--;
+    [self.requestArray removeObject:request];
     [self.optLock unlock];
     if(self.isConnected)
-        [self dequeue];
+    {
+        if(request.isEmpty)
+            self.isListening = NO;
+        [self dequeue:request.isEmpty];
+    }
     //NSLog(@"request time out");
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -403,7 +446,7 @@
                                                                     @"xmpp:version": @"1.0",
                                                                     @"xmlns:xmpp": @"urn:xmpp:xbosh"}];
                 NSURLRequest *request = [self createRequest:[element convertToString] timeout:self.timeout-1];
-                [self sendRequest:request];
+                [self sendRequest:request isEmpty:NO];
                 
                 self.isAuthing = NO;
             }
@@ -478,6 +521,7 @@
     {
         if([element.name isEqualToString:@"body"] && [element.attributes[@"type"] isEqualToString:@"terminate"])
         {
+            self.isListening = NO;
             if(self.isConnected)
             {
                 _isConnected = NO;
@@ -518,7 +562,6 @@
 -(void)handleMessageResponse:(XMLElement*)element
 {
     NSString *jidString = element.attributes[@"from"];
-    NSString *uuid = element.attributes[@"id"];
     DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
     
     XMLElement* xElement = [element findElement:@"x"];
@@ -576,14 +619,14 @@
             {
                 if(self.currentUser.jid.bareJID == user.jid.bareJID)
                 {
-                    if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:uuid:)])
-                        [self.delegate didRecieveGroupCarbon:text group:group from:user uuid:uuid];
+                    if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:attributes:)])
+                        [self.delegate didRecieveGroupCarbon:text group:group from:user attributes:element.attributes];
                 }
-                else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:uuid:)])
-                    [self.delegate didRecieveGroupMessage:text group:group from:user uuid:uuid];
+                else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:attributes:)])
+                    [self.delegate didRecieveGroupMessage:text group:group from:user attributes:element.attributes];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:uuid:)] && self.currentUser.jid.bareJID != jid.bareJID)
-                [self.delegate didRecieveMessage:text from:user uuid:uuid];
+            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:attributes:)] && self.currentUser.jid.bareJID != jid.bareJID)
+                [self.delegate didRecieveMessage:text from:user attributes:element.attributes];
         }
         else
         {
@@ -880,6 +923,13 @@
 -(NSString*)currentBoshSID
 {
     return self.boshSID;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)addCookie:(NSString*)val forKey:(NSString*)key
+{
+    if(!self.cookies)
+        self.cookies = [[NSMutableDictionary alloc] init];
+    [self.cookies setObject:val forKey:key];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
