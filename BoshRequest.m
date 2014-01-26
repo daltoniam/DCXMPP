@@ -22,6 +22,7 @@
 {
     if(self = [super init])
     {
+        self.isEmpty = NO;
         self.receivedData = [[NSMutableData alloc] init];
         self.connection = [[NSURLConnection alloc] initWithRequest:request delegate:self];
     }
