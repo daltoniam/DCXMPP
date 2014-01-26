@@ -612,7 +612,7 @@
             NSString *text = [body.text xmlUnSafe];
             if(group)
             {
-                if(self.currentUser.jid.bareJID == user.jid.bareJID)
+                if([self.currentUser.jid.bareJID isEqualToString:user.jid.bareJID])
                 {
                     if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:attributes:)])
                         [self.delegate didRecieveGroupCarbon:text group:group from:user attributes:element.attributes];
