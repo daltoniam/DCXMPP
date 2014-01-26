@@ -51,9 +51,6 @@
 //the inactivity of the empty request.
 @property(nonatomic,assign)int inactivity;
 
-//the listening boolean
-@property(nonatomic,assign)BOOL isListening;
-
 //the username of the person logging in
 @property(nonatomic,copy)NSString *userName;
 
@@ -145,6 +142,7 @@
     _currentUser = [DCXMPPUser userWithJID:jid];
     _currentUser.presence = DCUserPresenceAvailable;
     _isConnected = YES;
+    [self listenConnection];
     //[self setPresence:DCUserPresenceAvailable status:nil];
     [self getRoster];
     //[self getBookmarks];
@@ -318,18 +316,24 @@
     if(!self.contentQueue)
         self.contentQueue = [NSMutableArray new];
     [self.contentQueue addObject:element];
-    [self dequeue:NO];
+    [self dequeue];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)dequeue:(BOOL)isEmpty
+-(void)listenConnection
+{
+    NSString *postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
+    NSURLRequest *request = [self createRequest:postText timeout:self.inactivity];
+    [self sendRequest:request isEmpty:YES];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)dequeue
 {
     if(!self.boshSID)
         return;
+    //NSLog(@"opt count: %d request: %@",self.optCount,self.requestArray);
     if(self.optCount < self.maxCount)
     {
-        int time = self.timeout;
-        NSString *postText = nil;
-        if(self.contentQueue.count > 0 && !isEmpty)
+        if(self.contentQueue.count > 0)
         {
             XMLElement *body = [XMLElement elementWithName:@"body"
                                                 attributes:@{@"rid": [NSString stringWithFormat:@"%lld",self.boshRID],
@@ -337,20 +341,11 @@
             for(XMLElement *content in self.contentQueue)
                 [body.childern addObject:content];
             [self.contentQueue removeAllObjects];
-            postText = [body convertToString];
+            NSString *postText = [body convertToString];
+            NSURLRequest *request = [self createRequest:postText timeout:self.timeout];
+            [self sendRequest:request isEmpty:NO];
+            //NSLog(@"sending: %@",postText);
         }
-        else
-        {
-            if(self.isListening)
-                return;
-            self.isListening = isEmpty = YES;
-            //NSLog(@"opened listening connection...");
-            time = self.inactivity;
-            postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
-        }
-        //NSLog(@"sending: %@",postText);
-        NSURLRequest *request = [self createRequest:postText timeout:time];
-        [self sendRequest:request isEmpty:isEmpty];
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -402,12 +397,10 @@
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
     //NSLog(@"Recieving: %@\n\n",[element convertToString]);
-    if([self processResponse:element])
-    {
-        if(request.isEmpty)
-            self.isListening = NO;
-        [self dequeue:request.isEmpty];
-    }
+    if(request.isEmpty)
+        [self listenConnection];
+    if([self processResponse:element] && !request.isEmpty)
+        [self dequeue];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFailed:(BoshRequest*)request
@@ -416,12 +409,10 @@
     self.optCount--;
     [self.requestArray removeObject:request];
     [self.optLock unlock];
-    if(self.isConnected)
-    {
-        if(request.isEmpty)
-            self.isListening = NO;
-        [self dequeue:request.isEmpty];
-    }
+    if(self.isConnected && !request.isEmpty)
+        [self dequeue];
+    else
+        [self listenConnection];
     //NSLog(@"request time out");
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -477,6 +468,7 @@
                 _currentUser = [DCXMPPUser userWithJID:jid];
                 _currentUser.presence = DCUserPresenceAvailable;
                 _isConnected = YES;
+                [self listenConnection];
                 //[self addContent:[XMLElement elementWithName:@"presence" attributes:nil]];
                 [self getRoster];
                 [self getBookmarks];
@@ -521,7 +513,6 @@
     {
         if([element.name isEqualToString:@"body"] && [element.attributes[@"type"] isEqualToString:@"terminate"])
         {
-            self.isListening = NO;
             if(self.isConnected)
             {
                 _isConnected = NO;
