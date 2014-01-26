@@ -522,6 +522,10 @@
                     [group leave];
                 }
                 [self.contentQueue removeAllObjects];
+                for(BoshRequest *request in self.requestArray)
+                    [request cancel];
+                [self.requestArray removeAllObjects];
+                self.optCount = 0;
                 self.boshSID = nil;
                 NSLog(@"bosh connection terminated: %@",[element convertToString]);
                 if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
