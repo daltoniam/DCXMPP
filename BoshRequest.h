@@ -11,6 +11,10 @@
 
 @class BoshRequest;
 
+typedef void (^BOSHRequestSuccess)(BoshRequest *request);
+
+typedef void (^BOSHRequestFailure)(NSError *error);
+
 @protocol BoshRequestDelegate <NSObject>
 
 @required
@@ -45,6 +49,14 @@
  @param request is the NSURLRequest you created.
  */
 -(instancetype)initWithRequest:(NSURLRequest*)request;
+
+
+/**
+ starts the BOSH request.
+ @param success block is when the request finishes successfully
+ @param failure block is when the request fails.
+ */
+-(void)start:(BOSHRequestSuccess)success failure:(BOSHRequestFailure)failure;
 
 /**
  starts the BOSH request.

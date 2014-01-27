@@ -72,6 +72,9 @@
 //cookies to send in your bosh requests
 @property(nonatomic,strong)NSMutableDictionary *cookies;
 
+//the one and only listen request
+@property(nonatomic,strong)BoshRequest *listenRequest;
+
 @end
 
 @implementation DCXMPP
@@ -114,7 +117,7 @@
                                      @"xmlns:xmpp": @"urn:xmpp:xbosh"};
         XMLElement *content = [XMLElement elementWithName:@"body" attributes:attributes];
         NSURLRequest *request = [self createRequest:[content convertToString] timeout:self.timeout-1];
-        [self sendRequest:request isEmpty:NO];
+        [self sendRequest:request];
         //[self addContent:content];
     }
 }
@@ -324,7 +327,15 @@
     //NSLog(@"listen connection");
     NSString *postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
     NSURLRequest *request = [self createRequest:postText timeout:self.inactivity];
-    [self sendRequest:request isEmpty:YES];
+    self.listenRequest = [[BoshRequest alloc] initWithRequest:request];
+    self.listenRequest.isEmpty = YES;
+    [self.listenRequest start:^(BoshRequest *request){
+        XMLElement* element = [request responseElement];
+        [self processResponse:element];
+        [self listenConnection];
+    }failure:^(NSError* error){
+        [self listenConnection];
+    }];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)dequeue
@@ -332,27 +343,10 @@
     if(!self.boshSID)
         return;
     //NSLog(@"opt count: %d request: %@",self.optCount,self.requestArray);
-    if(self.optCount < self.maxCount)
+    if(self.optCount < self.maxCount-1) //for the listen connection
     {
-        BOOL noSend = YES;
-        [self.optLock lock];
-        for(BoshRequest *request in self.requestArray)
-        {
-            if(request.isEmpty)
-            {
-                noSend = NO;
-                break;
-            }
-        }
-        [self.optLock unlock];
-        if(noSend)
-        {
-            //NSLog(@"don't send request");
-            return;
-        }
         if(self.contentQueue.count > 0)
         {
-            //NSLog(@"opt count: %d request: %@",self.optCount,self.requestArray);
             XMLElement *body = [XMLElement elementWithName:@"body"
                                                 attributes:@{@"rid": [NSString stringWithFormat:@"%lld",self.boshRID],
                                                              @"sid": self.boshSID,@"xmlns": XMLNS_BOSH}];
@@ -361,7 +355,7 @@
             [self.contentQueue removeAllObjects];
             NSString *postText = [body convertToString];
             NSURLRequest *request = [self createRequest:postText timeout:self.timeout];
-            [self sendRequest:request isEmpty:NO];
+            [self sendRequest:request];
             //NSLog(@"sending: %@",postText);
         }
     }
@@ -391,18 +385,18 @@
     return request;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)sendRequest:(NSURLRequest*)request isEmpty:(BOOL)isempty
+-(void)sendRequest:(NSURLRequest*)request
 {
     if(!self.optLock)
         self.optLock = [[NSLock alloc] init];
     BoshRequest* opt = [[BoshRequest alloc] initWithRequest:request];
-    opt.isEmpty = isempty;
+    opt.isEmpty = NO;
     opt.delegate = (id<BoshRequestDelegate>)self;
     [opt start];
     [self.optLock lock];
-    self.optCount++;
     if(!self.requestArray)
         self.requestArray = [[NSMutableArray alloc] init];
+    self.optCount++;
     [self.requestArray addObject:opt];
     [self.optLock unlock];
 }
@@ -410,27 +404,23 @@
 -(void)requestFinished:(BoshRequest*)request
 {
     //NSLog(@"request is: %@",request);
-    if(request.isEmpty)
-        [self listenConnection];
     [self.optLock lock];
     self.optCount--;
     [self.requestArray removeObject:request];
     [self.optLock unlock];
     XMLElement* element = [request responseElement];
     //NSLog(@"Recieving: %@\n\n",[element convertToString]);
-    if([self processResponse:element] && !request.isEmpty)
+    if([self processResponse:element])
         [self dequeue];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFailed:(BoshRequest*)request
 {
-    if(request.isEmpty)
-        [self listenConnection];
     [self.optLock lock];
     self.optCount--;
     [self.requestArray removeObject:request];
     [self.optLock unlock];
-    if(self.isConnected && !request.isEmpty)
+    if(self.isConnected)
         [self dequeue];
     //NSLog(@"request time out");
 }
@@ -456,7 +446,7 @@
                                                                     @"xmpp:version": @"1.0",
                                                                     @"xmlns:xmpp": @"urn:xmpp:xbosh"}];
                 NSURLRequest *request = [self createRequest:[element convertToString] timeout:self.timeout-1];
-                [self sendRequest:request isEmpty:NO];
+                [self sendRequest:request];
                 
                 self.isAuthing = NO;
             }
@@ -541,6 +531,8 @@
                     [group leave];
                 }
                 [self.contentQueue removeAllObjects];
+                [self.listenRequest cancel];
+                self.listenRequest = nil;
                 for(BoshRequest *request in self.requestArray)
                     [request cancel];
                 [self.requestArray removeAllObjects];
