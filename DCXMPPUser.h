@@ -171,6 +171,16 @@ typedef enum {
  */
 -(void)getPresence;
 
+/**
+ Accept a buddy request from this user.
+ */
+-(void)acceptBuddyRequest;
+
+/**
+ Decline a buddy request from this user.
+ */
+-(void)declineBuddyRequest;
+
 ///-------------------------------
 /// @name Factory Methods
 ///-------------------------------

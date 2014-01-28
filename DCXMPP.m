@@ -75,6 +75,9 @@
 //the one and only listen request
 @property(nonatomic,strong)BoshRequest *listenRequest;
 
+//disco user
+@property(nonatomic,strong)DCXMPPUser *discoUser;
+
 @end
 
 @implementation DCXMPP
@@ -213,7 +216,7 @@
     XMLElement* element = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"get",
                                                                          @"from": self.currentUser.jid.fullJID,
                                                                          @"id": @"roster_1"}];
-    XMLElement* query = [XMLElement elementWithName:@"query" attributes:@{@"xmlns": @"jabber:iq:roster"}];
+    XMLElement* query = [XMLElement elementWithName:@"query" attributes:@{@"xmlns": XMLNS_ROSTER}];
     [element.childern addObject:query];
     [self addContent:element];
 }
@@ -240,8 +243,10 @@
         [self.rosterUsers setObject:user forKey:user.jid.bareJID];
         [(NSMutableArray*)_roster addObject:user];
     }
-    if([self.delegate respondsToSelector:@selector(didRecieveRoster:)])
-        [self.delegate didRecieveRoster:self.roster];
+    [self.delegateLock lock];
+    if([self.delegate respondsToSelector:@selector(didReceiveRoster:)])
+        [self.delegate didReceiveRoster:self.roster];
+    [self.delegateLock unlock];
     [self setPresence:DCUserPresenceAvailable status:nil];
     [self.currentUser getVCard];
 }
@@ -277,8 +282,10 @@
                 [group join];
         }
     }
-    if([self.delegate respondsToSelector:@selector(didRecieveBookmarks)])
-        [self.delegate didRecieveBookmarks];
+    [self.delegateLock lock];
+    if([self.delegate respondsToSelector:@selector(didReceiveBookmarks)])
+        [self.delegate didReceiveBookmarks];
+    [self.delegateLock unlock];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //content queueing
@@ -312,6 +319,53 @@
         if(user)
             [user sendTypingState:state];
     }
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)sendBuddyUpdate:(NSString*)jid name:(NSString*)name sub:(NSString*)sub
+{
+    XMLElement *iq = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"set"}];
+    XMLElement *query = [XMLElement elementWithName:@"query" attributes:@{@"xmlns": XMLNS_ROSTER}];
+    [iq.childern addObject:query];
+    NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithDictionary:@{@"jid": jid, @"name": name}];
+    if(sub)
+        [dict setObject:sub forKey:@"subscription"];
+    XMLElement *item = [XMLElement elementWithName:@"item" attributes:dict];
+    [query.childern addObject:item];
+    [self sendStanza:iq];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)addBuddy:(NSString*)jidString
+{
+    DCXMPPUser *user = self.rosterUsers[jidString];
+    if(!user)
+    {
+        user = [DCXMPPUser userWithJID:jidString];
+        self.users[user.jid.bareJID] = user;
+        [user acceptBuddyRequest];
+        [self sendBuddyUpdate:user.jid.bareJID name:user.name sub:nil];
+        [user getVCard];
+    }
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//still debating if I should make this a user object....
+-(void)removeBuddy:(NSString*)jidString
+{
+    //remove a buddy (jerk)
+    DCXMPPUser *user = self.rosterUsers[jidString];
+    if(user)
+    {
+        [self sendBuddyUpdate:user.jid.bareJID name:user.name sub:@"remove"];
+        [self.rosterUsers removeObjectForKey:user.jid.bareJID];
+    }
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)sendDisco:(NSString*)jidString
+{
+    DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
+    XMLElement *iq = [XMLElement elementWithName:@"iq" attributes:@{@"type": @"get", @"id": @"disco_1", @"to": jid.bareJID, @"from": self.currentUser.jid.fullJID}];
+    XMLElement *query = [XMLElement elementWithName:@"query" attributes:@{@"xmlns": XMLNS_DISCO}];
+    [iq.childern addObject:query];
+    [self sendStanza:iq];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)addContent:(XMLElement*)element
@@ -551,6 +605,8 @@
                 //NSLog(@"response: %@",[response convertToString]);
                 if([response.attributes[@"id"] isEqualToString:@"roster_1"])
                     [self handleRosterResponse:[response findElements:@"item"]];
+                else if([response.attributes[@"id"] isEqualToString:@"disco_1"])
+                    [self handleDisco:response];
                 else if([response.attributes[@"id"] isEqualToString:@"bookmark_1"])
                     [self handleBookmarksResponse:response];
                 else if([response.name isEqualToString:@"message"] && [response.attributes[@"type"] rangeOfString:@"chat"].location != NSNotFound)
@@ -575,7 +631,8 @@
     {
         if([xElement.attributes[@"xmlns"] isEqualToString:@"jabber:x:conference"])
         {
-            //[self fetchDiscoInfo:[xElement.attributes objectForKey:@"jid"]];
+            self.discoUser = self.users[jid.bareJID];
+            [self sendDisco:xElement.attributes[@"jid"]];
             return;
         }
     }
@@ -625,14 +682,14 @@
             {
                 if([self.currentUser.jid.bareJID isEqualToString:user.jid.bareJID])
                 {
-                    if([self.delegate respondsToSelector:@selector(didRecieveGroupCarbon:group:from:attributes:)])
-                        [self.delegate didRecieveGroupCarbon:text group:group from:user attributes:element.attributes];
+                    if([self.delegate respondsToSelector:@selector(didReceiveGroupCarbon:group:from:attributes:)])
+                        [self.delegate didReceiveGroupCarbon:text group:group from:user attributes:element.attributes];
                 }
-                else if([self.delegate respondsToSelector:@selector(didRecieveGroupMessage:group:from:attributes:)])
-                    [self.delegate didRecieveGroupMessage:text group:group from:user attributes:element.attributes];
+                else if([self.delegate respondsToSelector:@selector(didReceiveGroupMessage:group:from:attributes:)])
+                    [self.delegate didReceiveGroupMessage:text group:group from:user attributes:element.attributes];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveMessage:from:attributes:)] && self.currentUser.jid.bareJID != jid.bareJID)
-                [self.delegate didRecieveMessage:text from:user attributes:element.attributes];
+            else if([self.delegate respondsToSelector:@selector(didReceiveMessage:from:attributes:)] && self.currentUser.jid.bareJID != jid.bareJID)
+                [self.delegate didReceiveMessage:text from:user attributes:element.attributes];
         }
         else
         {
@@ -650,11 +707,11 @@
             
             if(group)
             {
-                if([self.delegate respondsToSelector:@selector(didRecieveGroupTypingState:group:from:)])
-                    [self.delegate didRecieveGroupTypingState:state group:group from:user];
+                if([self.delegate respondsToSelector:@selector(didReceiveGroupTypingState:group:from:)])
+                    [self.delegate didReceiveGroupTypingState:state group:group from:user];
             }
-            else if([self.delegate respondsToSelector:@selector(didRecieveTypingState:from:)])
-                [self.delegate didRecieveTypingState:state from:user];
+            else if([self.delegate respondsToSelector:@selector(didReceiveTypingState:from:)])
+                [self.delegate didReceiveTypingState:state from:user];
         }
     }
 }
@@ -699,8 +756,52 @@
     DCXMPPUser *user = self.users[jid.bareJID];
     if(!user && [jid.bareJID isEqualToString:self.currentUser.jid.bareJID])
         user = self.currentUser;
+    //buddy request
+    if([type isEqualToString:@"subscribe"])
+    {
+        [self.delegateLock lock];
+        NSString *name = nil;
+        XMLElement* item = [element findElement:@"item"];
+        if(item)
+        {
+            jidString = [item.attributes objectForKey:@"jid"];
+            jid = [DCXMPPJID jidWithString:jidString];
+            name = [item.attributes objectForKey:@"name"];
+        }
+        if(!user)
+        {
+            user = [DCXMPPUser userWithJID:jidString];
+            user.name = name;
+            user.presence = DCUserPresenceAvailable; //they are probably online....
+            self.users[user.jid.bareJID] = user;
+        }
+        if(!self.pendingBuddies)
+            self.pendingBuddies = [NSMutableArray array];
+        [self.pendingBuddies addObject:user];
+        if([self.delegate respondsToSelector:@selector(didReceiveBuddyRequest:)])
+            [self.delegate didReceiveBuddyRequest:user];
+        [self.delegateLock unlock];
+        return;
+    }
     if(user)
     {
+        if([type isEqualToString:@"unsubscribed"]) // you got canned!
+        {
+            [self.delegateLock lock];
+            if([self.delegate respondsToSelector:@selector(buddyDidRemove:)])
+                [self.delegate buddyDidRemove:user];
+            [self.rosterUsers removeObjectForKey:user];
+            [self.delegateLock unlock];
+            return;
+        }
+        else if([type isEqualToString:@"subscribed"]) //your buddy request was accepted
+        {
+            [user getVCard];
+            [self.rosterUsers setObject:user forKey:user.jid.bareJID];
+            if([self.delegate respondsToSelector:@selector(buddyDidAccept:)])
+                [self.delegate buddyDidAccept:user];
+            return;
+        }
         [self.delegateLock lock];
         user.lastResource = nil;
         XMLElement* statusElement = [element findElement:@"status"];
@@ -878,7 +979,25 @@
     }
     return element;//[element convertToString];
 }
-
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)handleDisco:(XMLElement*)element
+{
+    XMLElement* ident = [element findElement:@"identity"];
+    if(ident)
+    {
+        DCXMPPGroup* group = [DCXMPPGroup groupWithJID:element.attributes[@"from"]];
+        group.name = ident.attributes[@"name"];
+        if(!self.pendingGroups)
+            self.pendingGroups = [NSMutableArray array];
+        [self.pendingGroups addObject:group];
+        //NSLog(@"user: %@ invited you to: %@",self.discoUser.name,group.name);
+        [self.delegateLock lock];
+        if([self.delegate respondsToSelector:@selector(didReceiveGroupInvite:from:)])
+            [self.delegate didReceiveGroupInvite:group from:self.discoUser];
+        self.discoUser = nil;
+        [self.delegateLock unlock];
+    }
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //Authenication stuff
 ////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -107,6 +107,19 @@
     [[DCXMPP manager] sendStanza:element];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)acceptBuddyRequest
+{
+    XMLElement* element = [XMLElement elementWithName:@"presence" attributes:@{@"to": self.jid.bareJID, @"type": @"subscribe"}];
+    [[DCXMPP manager] sendStanza:element];
+    [self getVCard];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)declineBuddyRequest
+{
+    XMLElement* element = [XMLElement elementWithName:@"presence" attributes:@{@"to": self.jid.bareJID, @"type": @"unsubscribe"}];
+    [[DCXMPP manager] sendStanza:element];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
 +(NSString*)chatType
 {
     return @"chat";

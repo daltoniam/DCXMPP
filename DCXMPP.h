@@ -18,6 +18,8 @@ static NSString const *XMLNS_CLIENT  = @"jabber:client";
 static NSString const *XMLNS_SESSION = @"urn:ietf:params:xml:ns:xmpp-session";
 static NSString const *XMLNS_MUC = @"http://jabber.org/protocol/muc";
 static NSString const *XMLNS_VCARD  = @"vcard-temp";
+static NSString const *XMLNS_ROSTER  = @"jabber:iq:roster";
+static NSString const *XMLNS_DISCO  = @"http://jabber.org/protocol/disco#info";
 
 @protocol DCXMPPDelegate <NSObject>
 
@@ -32,15 +34,15 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 -(void)didFailXMPPLogin;
 
 /**
- Recieved the roster.
+ Received the roster.
  @param users returns the roster users.
  */
--(void)didRecieveRoster:(NSArray*)users;
+-(void)didReceiveRoster:(NSArray*)users;
 
 /**
- Recieved the bookmarks.
+ Received the bookmarks.
  */
--(void)didRecieveBookmarks;
+-(void)didReceiveBookmarks;
 
 
 ///-------------------------------
@@ -48,42 +50,42 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 ///-------------------------------
 
 /**
- Recieved a message.
+ Received a message.
  @param message is the text of the message.
  @param user is who the message was from
  */
--(void)didRecieveMessage:(NSString*)message from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
+-(void)didReceiveMessage:(NSString*)message from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
 
 /**
- Recieved a message.
+ Received a message.
  @param message is the text of the message.
  @param group is what group the message was from
  @param user is who the message was from
  */
--(void)didRecieveGroupMessage:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
+-(void)didReceiveGroupMessage:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
 
 /**
- Recieved a message that is from the current user, probably from another client
+ Received a message that is from the current user, probably from another client
  @param message is the text of the message.
  @param group is what group the message was from
  @param user is who the message was from. This would be the current user
  */
--(void)didRecieveGroupCarbon:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
+-(void)didReceiveGroupCarbon:(NSString*)message group:(DCXMPPGroup*)group from:(DCXMPPUser*)user attributes:(NSDictionary*)attributes;
 
 /**
- Recieved a message.
- @param state is the state of typing that was recieved.
+ Received a message.
+ @param state is the state of typing that was Received.
  @param user is who the message was from
  */
--(void)didRecieveTypingState:(DCTypingState)state from:(DCXMPPUser*)user;
+-(void)didReceiveTypingState:(DCTypingState)state from:(DCXMPPUser*)user;
 
 /**
- Recieved a message.
- @param state is the state of typing that was recieved.
+ Received a message.
+ @param state is the state of typing that was Received.
 @param group is what group the message was from
  @param user is who the message was from
  */
--(void)didRecieveGroupTypingState:(DCTypingState)state group:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
+-(void)didReceiveGroupTypingState:(DCTypingState)state group:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
 
 /**
  Notifies when a user joined a group.
@@ -104,16 +106,40 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 ///-------------------------------
 
 /**
- Recieved a updated vcard for a user.
+ Received a updated vcard for a user.
  @param user is who the vcard that was updated
  */
 -(void)didUpdateVCard:(DCXMPPUser*)user;
 
 /**
- Recieved a updated vcard for a user.
+ Received a updated vcard for a user.
  @param user is who the vcard that was updated
  */
 -(void)didUpdatePresence:(DCXMPPUser*)user;
+
+/**
+ Received a buddy request from a user.
+ @param user who requested your friendship
+ */
+-(void)didReceiveBuddyRequest:(DCXMPPUser*)user;
+
+/**
+ A buddy was accepted.
+ @param user who accepted your buddy request/
+ */
+-(void)buddyDidAccept:(DCXMPPUser*)user;
+
+/**
+ A buddy removed you.
+ @param user who remove you as a buddy.
+ */
+-(void)buddyDidRemove:(DCXMPPUser*)user;
+
+/**
+ Someone invited you to a group
+ @param group you where invited to.
+ */
+-(void)didReceiveGroupInvite:(DCXMPPGroup*)group from:(DCXMPPUser*)user;
 
 @end
 
@@ -139,7 +165,7 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
 @property(nonatomic,assign,readonly)BOOL isConnected;
 
 /**
- Implement this to recieved the delegate methods.
+ Implement this to Received the delegate methods.
  */
 @property(nonatomic,assign)id<DCXMPPDelegate>delegate;
 
@@ -154,6 +180,16 @@ static NSString const *XMLNS_VCARD  = @"vcard-temp";
  @return A NSArray of the current user's roster.
  */
 @property(nonatomic,strong,readonly)NSArray *roster;
+
+/**
+ returns the pending buddies, if you have pending requests.
+ */
+@property(nonatomic,strong)NSMutableArray *pendingBuddies;
+
+/**
+ returns the pending groups, if you have pending requests.
+ */
+@property(nonatomic,strong)NSMutableArray *pendingGroups;
 
 /**
 This returns a DCXMPP singlton that you use to do all your xmpp needs.
@@ -239,9 +275,21 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
 /**
  Add a cookie to send in the request headers of your requests.
  @param val: value/cookie to send
- @param ke: key of the cookie.
+ @param key: key of the cookie.
  */
 -(void)addCookie:(NSString*)val forKey:(NSString*)key;
+
+/**
+ Request to add a new user to the current user roster
+ @param jidString: a string of a bare jid of a buddy to add
+ */
+-(void)addBuddy:(NSString*)jidString;
+
+/**
+ Request to remove a user from the current user roster
+ @param jidString: a string of a bare jid of a buddy to remove
+ */
+-(void)removeBuddy:(NSString*)jidString;
 
 
 @end
