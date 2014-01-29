@@ -109,7 +109,9 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)acceptBuddyRequest
 {
-    XMLElement* element = [XMLElement elementWithName:@"presence" attributes:@{@"to": self.jid.bareJID, @"type": @"subscribe"}];
+    XMLElement* element = [XMLElement elementWithName:@"presence" attributes:@{@"to": self.jid.bareJID, @"type": @"subscribed"}];
+    [[DCXMPP manager] sendStanza:element];
+    element = [XMLElement elementWithName:@"presence" attributes:@{@"to": self.jid.bareJID, @"type": @"subscribe"}];
     [[DCXMPP manager] sendStanza:element];
     [self getVCard];
 }
