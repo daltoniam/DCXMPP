@@ -274,10 +274,9 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
 
 /**
  Add a cookie to send in the request headers of your requests.
- @param val: value/cookie to send
- @param key: key of the cookie.
+ @param cookie: http cookie to add.
  */
--(void)addCookie:(NSString*)val forKey:(NSString*)key;
+-(void)addCookie:(NSHTTPCookie*)cookie;
 
 /**
  Request to add a new user to the current user roster

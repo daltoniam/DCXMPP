@@ -148,7 +148,7 @@
     _currentUser = [DCXMPPUser userWithJID:jid];
     _currentUser.presence = DCUserPresenceAvailable;
     _isConnected = YES;
-    [self listenConnection];
+    //[self listenConnection];
     //[self setPresence:DCUserPresenceAvailable status:nil];
     [self getRoster];
     //[self getBookmarks];
@@ -167,6 +167,8 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)disconnect
 {
+    [self.listenRequest cancel];
+    self.listenRequest = nil;
     _isConnected = NO;
     [self.contentQueue removeAllObjects];
     [self.groups removeAllObjects];
@@ -179,7 +181,7 @@
     [self setPresence:DCUserPresenceUnAvailable status:nil];
     self.boshRID = 0;
     self.boshSID = nil;
-    
+    self.optCount = 0;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(DCXMPPUser*)userForJid:(NSString*)jid
@@ -249,6 +251,8 @@
     [self.delegateLock unlock];
     [self setPresence:DCUserPresenceAvailable status:nil];
     [self.currentUser getVCard];
+    if(!self.listenRequest)
+        [self listenConnection];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //bookmark processing
@@ -418,14 +422,17 @@
 -(NSURLRequest*)createRequest:(NSString*)postText timeout:(int)time
 {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:self.boshURL]];
-    for(NSString* key in self.cookies)
+    NSDictionary * headers = [NSHTTPCookie requestHeaderFieldsWithCookies:[self.cookies allValues]];
+    //NSLog(@"create request header: %@",headers);
+    [request setAllHTTPHeaderFields:headers];
+    /*for(NSString* key in self.cookies)
     {
         NSString* check = [request valueForHTTPHeaderField:key];
         if(!check)
             [request addValue:self.cookies[key] forHTTPHeaderField:key];
         else
             [request setValue:self.cookies[key] forHTTPHeaderField:key];
-    }
+    }*/
     [request setTimeoutInterval:time];
     NSData *postBody = [postText dataUsingEncoding:NSUTF8StringEncoding];
     unsigned long long postLength = postBody.length;
@@ -436,6 +443,7 @@
     [request addValue:@"gzip" forHTTPHeaderField:@"Accept-Encoding"];
     [request setHTTPMethod:@"POST"];
     [request setHTTPBody:postBody];
+    //NSLog(@"DEBUG out headers: %@",[request allHTTPHeaderFields]);
     return request;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -531,7 +539,7 @@
                 _currentUser = [DCXMPPUser userWithJID:jid];
                 _currentUser.presence = DCUserPresenceAvailable;
                 _isConnected = YES;
-                [self listenConnection];
+                ///[self listenConnection];
                 //[self addContent:[XMLElement elementWithName:@"presence" attributes:nil]];
                 [self getRoster];
                 [self getBookmarks];
@@ -579,6 +587,7 @@
             if(self.isConnected)
             {
                 _isConnected = NO;
+                [self.cookies removeAllObjects];
                 for(id key in self.groups)
                 {
                     DCXMPPGroup *group = self.groups[key];
@@ -592,6 +601,8 @@
                 [self.requestArray removeAllObjects];
                 self.optCount = 0;
                 self.boshSID = nil;
+                self.boshRID = 0;
+                
                 NSLog(@"bosh connection terminated: %@",[element convertToString]);
                 if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
                     [self.delegate didFailXMPPLogin];
@@ -1050,11 +1061,11 @@
     return self.boshSID;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
--(void)addCookie:(NSString*)val forKey:(NSString*)key
+-(void)addCookie:(NSHTTPCookie*)cookie
 {
     if(!self.cookies)
         self.cookies = [[NSMutableDictionary alloc] init];
-    [self.cookies setObject:val forKey:key];
+    [self.cookies setObject:cookie forKey:cookie.name];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
