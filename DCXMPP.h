@@ -290,5 +290,15 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
  */
 -(void)removeBuddy:(NSString*)jidString;
 
+/**
+ background support for iOS.
+ */
+-(void)background;
+
+/**
+ foreground support for iOS.
+ */
+-(void)foreground;
+
 
 @end

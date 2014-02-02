@@ -78,6 +78,9 @@
 //disco user
 @property(nonatomic,strong)DCXMPPUser *discoUser;
 
+//background iOS support
+@property(nonatomic,assign)BOOL isBackground;
+
 @end
 
 @implementation DCXMPP
@@ -96,6 +99,7 @@
 -(void)connect:(NSString*)userName password:(NSString*)password host:(NSString*)host boshURL:(NSString*)boshURL
 {
     self.isCustomConnect = NO;
+    self.isBackground = NO;
     if(!self.isConnected)
     {
         if(!self.delegateLock)
@@ -128,6 +132,7 @@
 -(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL
 {
     self.isCustomConnect = YES;
+    self.isBackground = NO;
     [self.contentQueue removeAllObjects];
     if(!jid || !sid || rid <= 0 || !host || !boshURL)
     {
@@ -142,7 +147,7 @@
     self.maxCount = 2;
     self.host = host;
     self.timeout = 5;
-    self.inactivity = 14400;
+    self.inactivity = 70;
     self.boshURL = boshURL;
     self.boshRID = rid;
     _currentUser = [DCXMPPUser userWithJID:jid];
@@ -390,9 +395,11 @@
     [self.listenRequest start:^(BoshRequest *request){
         XMLElement* element = [request responseElement];
         [self processResponse:element];
-        [self listenConnection];
+        if(!self.isBackground)
+            [self listenConnection];
     }failure:^(NSError* error){
-        [self listenConnection];
+        if(!self.isBackground)
+            [self listenConnection];
     }];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,6 +468,17 @@
     self.optCount++;
     [self.requestArray addObject:opt];
     [self.optLock unlock];
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)background
+{
+    self.isBackground = YES;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+-(void)foreground
+{
+    self.isBackground = NO;
+    [self listenConnection];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFinished:(BoshRequest*)request
