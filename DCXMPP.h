@@ -279,6 +279,11 @@ This returns a DCXMPP singlton that you use to do all your xmpp needs.
 -(void)addCookie:(NSHTTPCookie*)cookie;
 
 /**
+ Remove the stored cookies
+ */
+-(void)clearCookies;
+
+/**
  Request to add a new user to the current user roster
  @param jidString: a string of a bare jid of a buddy to add
  */
