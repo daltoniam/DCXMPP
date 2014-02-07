@@ -81,6 +81,8 @@
 //background iOS support
 @property(nonatomic,assign)BOOL isBackground;
 
+@property(nonatomic,assign)BOOL getVCard;
+
 @end
 
 @implementation DCXMPP
@@ -125,12 +127,14 @@
         XMLElement *content = [XMLElement elementWithName:@"body" attributes:attributes];
         NSURLRequest *request = [self createRequest:[content convertToString] timeout:self.timeout-1];
         [self sendRequest:request];
+        self.getVCard = YES;
         //[self addContent:content];
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)connect:(NSString*)jid rid:(long long)rid sid:(NSString*)sid host:(NSString*)host boshURL:(NSString*)boshURL
 {
+    self.getVCard = YES;
     self.isCustomConnect = YES;
     self.isBackground = NO;
     [self.contentQueue removeAllObjects];
@@ -174,6 +178,7 @@
 {
     [self.listenRequest cancel];
     self.listenRequest = nil;
+    [self setPresence:DCUserPresenceUnAvailable status:nil];
     _isConnected = NO;
     [self.contentQueue removeAllObjects];
     [self.groups removeAllObjects];
@@ -183,10 +188,10 @@
     self.rosterUsers = nil;
     self.users = nil;
     _currentUser = nil;
-    [self setPresence:DCUserPresenceUnAvailable status:nil];
     self.boshRID = 0;
     self.boshSID = nil;
     self.optCount = 0;
+    self.getVCard = YES;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(DCXMPPUser*)userForJid:(NSString*)jid
@@ -255,9 +260,6 @@
         [self.delegate didReceiveRoster:self.roster];
     [self.delegateLock unlock];
     [self setPresence:DCUserPresenceAvailable status:nil];
-    [self.currentUser getVCard];
-    if(!self.listenRequest)
-        [self listenConnection];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //bookmark processing
@@ -388,19 +390,22 @@
 -(void)listenConnection
 {
     //NSLog(@"listen connection");
-    NSString *postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
-    NSURLRequest *request = [self createRequest:postText timeout:self.inactivity];
-    self.listenRequest = [[BoshRequest alloc] initWithRequest:request];
-    self.listenRequest.isEmpty = YES;
-    [self.listenRequest start:^(BoshRequest *request){
-        XMLElement* element = [request responseElement];
-        [self processResponse:element];
-        if(!self.isBackground)
-            [self listenConnection];
-    }failure:^(NSError* error){
-        if(!self.isBackground)
-            [self listenConnection];
-    }];
+    if(self.boshSID)
+    {
+        NSString *postText = [NSString stringWithFormat:@"<body rid='%lld' sid='%@' xmlns='%@'></body>",self.boshRID,self.boshSID,XMLNS_BOSH];
+        NSURLRequest *request = [self createRequest:postText timeout:self.inactivity];
+        self.listenRequest = [[BoshRequest alloc] initWithRequest:request];
+        self.listenRequest.isEmpty = YES;
+        [self.listenRequest start:^(BoshRequest *request){
+            XMLElement* element = [request responseElement];
+            [self processResponse:element];
+            if(!self.isBackground)
+                [self listenConnection];
+        }failure:^(NSError* error){
+            if(!self.isBackground)
+                [self listenConnection];
+        }];
+    }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)dequeue
@@ -492,6 +497,8 @@
     //NSLog(@"Recieving: %@\n\n",[element convertToString]);
     if([self processResponse:element])
         [self dequeue];
+    if(self.optCount == 0 && !self.listenRequest)
+        [self listenConnection];
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)requestFailed:(BoshRequest*)request
@@ -502,6 +509,8 @@
     [self.optLock unlock];
     if(self.isConnected)
         [self dequeue];
+    if(self.optCount == 0 && !self.listenRequest)
+        [self listenConnection];
     //NSLog(@"request time out");
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -557,6 +566,7 @@
                 _currentUser = [DCXMPPUser userWithJID:jid];
                 _currentUser.presence = DCUserPresenceAvailable;
                 _isConnected = YES;
+                self.getVCard = YES;
                 ///[self listenConnection];
                 //[self addContent:[XMLElement elementWithName:@"presence" attributes:nil]];
                 [self getRoster];
@@ -620,6 +630,7 @@
                 self.optCount = 0;
                 self.boshSID = nil;
                 self.boshRID = 0;
+                self.getVCard = YES;
                 
                 NSLog(@"bosh connection terminated: %@",[element convertToString]);
                 if([self.delegate respondsToSelector:@selector(didFailXMPPLogin)])
@@ -779,6 +790,11 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 -(void)handlePresenceResponse:(XMLElement*)element
 {
+    if(self.getVCard)
+    {
+        self.getVCard = NO;
+        [self.currentUser getVCard];
+    }
     NSString *type = element.attributes[@"type"];
     NSString *jidString = element.attributes[@"from"];
     DCXMPPJID *jid = [DCXMPPJID jidWithString:jidString];
@@ -937,23 +953,18 @@
     if(self.isConnected)
     {
         XMLElement* element = [self buildPresence:presence status:status to:jid];
-        [self addContent:element];
         if(!jid)
         {
             for(id key in self.groups)
             {
                 DCXMPPGroup *group = self.groups[key];
                 if(group.isJoined)
-                {
                     [self addContent:[self buildPresence:presence status:status to:group.jid.bareJID]];
-                    //[element.childern addObject:[self buildPresence:presence status:status to:group.jid.bareJID]];
-                    //content = [content stringByAppendingString:[self buildPresence:presence status:status to:group.jid.bareJID]];
-                }
             }
         }
+        [self addContent:element];
         self.currentUser.status = status;
         self.currentUser.presence = presence;
-        //[self addContent:element];
     }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
